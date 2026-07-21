@@ -49,6 +49,11 @@
 	--pd-rust: #a23e2e;
 }
 
+.project-dashboard .pd-filter-bar {
+	max-width: 320px;
+	margin-bottom: 18px;
+}
+
 .project-dashboard .pd-empty {
 	text-align: center;
 	color: var(--pd-slate);

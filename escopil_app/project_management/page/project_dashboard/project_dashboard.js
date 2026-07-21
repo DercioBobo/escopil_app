@@ -13,32 +13,46 @@ frappe.pages['project-dashboard'].on_page_load = function (wrapper) {
 class ProjectDashboard {
 	constructor(page) {
 		this.page = page;
-		this.make_filters();
+		this.setup();
+	}
+
+	setup() {
+		$(this.page.body).html(`
+			<div class="project-dashboard">
+				<div class="pd-filter-bar"></div>
+				<div class="pd-content"></div>
+			</div>
+		`);
+
+		this.$wrapper = $(this.page.body).find('.project-dashboard');
+		this.$content = this.$wrapper.find('.pd-content');
+
+		this.project_control = frappe.ui.form.make_control({
+			parent: this.$wrapper.find('.pd-filter-bar').get(0),
+			df: {
+				fieldtype: 'Link',
+				fieldname: 'project',
+				label: 'Projeto',
+				options: 'Project',
+				onchange: () => {
+					const project = this.project_control.get_value();
+					if (project) {
+						this.load(project);
+					} else {
+						this.render_empty();
+					}
+				}
+			},
+			render_input: true,
+		});
+		this.project_control.refresh();
+
 		this.render_empty();
 	}
 
-	make_filters() {
-		this.project_field = this.page.add_field({
-			fieldname: 'project',
-			label: 'Projeto',
-			fieldtype: 'Link',
-			options: 'Project',
-			change: () => {
-				const project = this.project_field.get_value();
-				if (project) {
-					this.load(project);
-				} else {
-					this.render_empty();
-				}
-			}
-		});
-	}
-
 	render_empty() {
-		$(this.page.body).html(`
-			<div class="project-dashboard">
-				<div class="pd-empty">Selecione um Projeto para ver o painel de orçamento.</div>
-			</div>
+		this.$content.html(`
+			<div class="pd-empty">Selecione um Projeto para ver o painel de orçamento.</div>
 		`);
 	}
 
@@ -174,8 +188,8 @@ class ProjectDashboard {
 			</tr>
 		`;
 
-		$(this.page.body).html(`
-			<div class="project-dashboard pd-fade">
+		this.$content.html(`
+			<div class="pd-fade">
 				${strip}
 				<h6 class="pd-eyebrow">Rubricas do Orçamento</h6>
 				<div class="pd-table-wrap">
