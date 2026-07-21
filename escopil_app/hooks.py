@@ -59,7 +59,7 @@ app_license = "MIT"
 # ------------
 
 # before_install = "escopil_app.install.before_install"
-# after_install = "escopil_app.install.after_install"
+after_install = "escopil_app.install.after_install"
 
 # Desk Notifications
 # -------------------
@@ -83,13 +83,12 @@ app_license = "MIT"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-#	"*": {
-#		"on_update": "method",
-#		"on_cancel": "method",
-#		"on_trash": "method"
-#	}
-# }
+doc_events = {
+	"Purchase Invoice": {
+		"on_submit": "escopil_app.project_management.utils.create_cost_entries_from_purchase_invoice",
+		"on_cancel": "escopil_app.project_management.utils.remove_cost_entries_from_purchase_invoice",
+	}
+}
 
 # Scheduled Tasks
 # ---------------

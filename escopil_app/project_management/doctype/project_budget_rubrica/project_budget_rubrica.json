@@ -1,0 +1,38 @@
+{
+ "actions": [],
+ "creation": "2026-07-21 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "rubrica",
+  "monthly_forecast"
+ ],
+ "fields": [
+  {
+   "fieldname": "rubrica",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Rubrica",
+   "options": "Project Rubrica",
+   "reqd": 1
+  },
+  {
+   "fieldname": "monthly_forecast",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Previsão Mensal"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-21 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Project Management",
+ "name": "Project Budget Rubrica",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

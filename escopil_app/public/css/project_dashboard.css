@@ -1,0 +1,232 @@
+/* Project Dashboard — ledger-style budget control
+   Signature: the "Peso" column carries an inline weight bar (real data, not
+   decoration) and every actual-cost cell is heat-tinted by variance against
+   its rubrica's monthly forecast — green under budget, rust over. */
+
+.project-dashboard {
+	--pd-ink: #1b2430;
+	--pd-slate: #6b7280;
+	--pd-paper: #faf8f4;
+	--pd-rule: #d8d2c4;
+	--pd-amber: #b8873b;
+	--pd-amber-rgb: 184, 135, 59;
+	--pd-moss: #3f6b52;
+	--pd-moss-rgb: 63, 107, 82;
+	--pd-rust: #a23e2e;
+	--pd-rust-rgb: 162, 62, 46;
+
+	color: var(--pd-ink);
+	padding: 20px 4px 40px;
+}
+
+@media (prefers-color-scheme: dark) {
+	.project-dashboard {
+		--pd-ink: #e8e6e1;
+		--pd-slate: #9aa3ae;
+		--pd-paper: #12161c;
+		--pd-rule: #2a323d;
+		--pd-amber: #d9a55c;
+		--pd-moss: #6fa98a;
+		--pd-rust: #e2695a;
+	}
+}
+:root[data-theme="dark"] .project-dashboard {
+	--pd-ink: #e8e6e1;
+	--pd-slate: #9aa3ae;
+	--pd-paper: #12161c;
+	--pd-rule: #2a323d;
+	--pd-amber: #d9a55c;
+	--pd-moss: #6fa98a;
+	--pd-rust: #e2695a;
+}
+:root[data-theme="light"] .project-dashboard {
+	--pd-ink: #1b2430;
+	--pd-slate: #6b7280;
+	--pd-paper: #faf8f4;
+	--pd-rule: #d8d2c4;
+	--pd-amber: #b8873b;
+	--pd-moss: #3f6b52;
+	--pd-rust: #a23e2e;
+}
+
+.project-dashboard .pd-empty {
+	text-align: center;
+	color: var(--pd-slate);
+	padding: 64px 20px;
+	font-size: 13px;
+	letter-spacing: 0.02em;
+}
+
+/* ---- KPI strip ---- */
+.project-dashboard .pd-strip {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(140px, 1fr));
+	gap: 1px;
+	background: var(--pd-rule);
+	border: 1px solid var(--pd-rule);
+	border-radius: 3px;
+	overflow: hidden;
+	margin-bottom: 28px;
+}
+.project-dashboard .pd-stat {
+	background: var(--pd-paper);
+	padding: 14px 18px;
+}
+.project-dashboard .pd-stat-label {
+	display: block;
+	font-size: 10.5px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.09em;
+	color: var(--pd-slate);
+	margin-bottom: 6px;
+}
+.project-dashboard .pd-stat-value {
+	font-variant-numeric: tabular-nums;
+	font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+	font-size: 20px;
+	font-weight: 600;
+	line-height: 1.15;
+}
+.project-dashboard .pd-stat-sub {
+	display: block;
+	margin-top: 3px;
+	font-size: 11.5px;
+	color: var(--pd-slate);
+	font-variant-numeric: tabular-nums;
+}
+.project-dashboard .pd-stat-value.is-positive { color: var(--pd-moss); }
+.project-dashboard .pd-stat-value.is-negative { color: var(--pd-rust); }
+
+/* ---- Section eyebrow ---- */
+.project-dashboard .pd-eyebrow {
+	font-size: 10.5px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.14em;
+	color: var(--pd-slate);
+	border-bottom: 1px solid var(--pd-rule);
+	padding-bottom: 6px;
+	margin: 0 0 10px;
+}
+
+/* ---- Ledger table ---- */
+.project-dashboard .pd-table-wrap {
+	overflow-x: auto;
+	border: 1px solid var(--pd-rule);
+	border-radius: 3px;
+	background: var(--pd-paper);
+}
+.project-dashboard table.pd-ledger {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12.5px;
+	white-space: nowrap;
+}
+.project-dashboard table.pd-ledger th,
+.project-dashboard table.pd-ledger td {
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--pd-rule);
+	font-variant-numeric: tabular-nums;
+}
+.project-dashboard table.pd-ledger thead th {
+	text-align: right;
+	font-size: 10.5px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--pd-slate);
+	border-bottom: 2px solid var(--pd-rule);
+	white-space: nowrap;
+}
+.project-dashboard table.pd-ledger thead th.pd-col-rubrica {
+	text-align: left;
+}
+.project-dashboard table.pd-ledger td.pd-col-rubrica {
+	text-align: left;
+	font-weight: 500;
+	white-space: normal;
+	min-width: 160px;
+}
+.project-dashboard table.pd-ledger td.text-right,
+.project-dashboard table.pd-ledger th.text-right {
+	text-align: right;
+	font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+}
+.project-dashboard table.pd-ledger tbody tr:hover td {
+	background: rgba(var(--pd-amber-rgb), 0.06);
+}
+
+/* weight bar — encodes the rubrica's real share of the budget */
+.project-dashboard .pd-weight {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+}
+.project-dashboard .pd-weight-bar {
+	width: 42px;
+	height: 5px;
+	border-radius: 2px;
+	background: var(--pd-rule);
+	overflow: hidden;
+	flex-shrink: 0;
+}
+.project-dashboard .pd-weight-bar > span {
+	display: block;
+	height: 100%;
+	background: var(--pd-amber);
+}
+
+/* variance heat — actual vs. forecast, color as data */
+.project-dashboard td.pd-variance-under {
+	background: rgba(var(--pd-moss-rgb), var(--pd-alpha, 0.12));
+}
+.project-dashboard td.pd-variance-over {
+	background: rgba(var(--pd-rust-rgb), var(--pd-alpha, 0.12));
+}
+
+.project-dashboard tr.pd-row-total td {
+	border-top: 2px solid var(--pd-rule);
+	font-weight: 700;
+}
+.project-dashboard tr.pd-row-billing td,
+.project-dashboard tr.pd-row-margin td,
+.project-dashboard tr.pd-row-margin-pct td {
+	color: var(--pd-slate);
+}
+.project-dashboard tr.pd-row-margin td.text-right,
+.project-dashboard tr.pd-row-margin-pct td.text-right {
+	font-weight: 600;
+}
+.project-dashboard tr.pd-row-margin td.pd-variance-under,
+.project-dashboard tr.pd-row-margin-pct td.pd-variance-under {
+	color: var(--pd-moss);
+	background: transparent;
+}
+.project-dashboard tr.pd-row-margin td.pd-variance-over,
+.project-dashboard tr.pd-row-margin-pct td.pd-variance-over {
+	color: var(--pd-rust);
+	background: transparent;
+}
+.project-dashboard tr.pd-row-margin td.text-left,
+.project-dashboard tr.pd-row-billing td.text-left,
+.project-dashboard tr.pd-row-margin-pct td.text-left,
+.project-dashboard tr.pd-row-total td.text-left {
+	text-transform: uppercase;
+	font-size: 10.5px;
+	letter-spacing: 0.08em;
+}
+
+.project-dashboard .pd-fade {
+	animation: pd-fade-in 0.18s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+	.project-dashboard .pd-fade {
+		animation: none;
+	}
+}
+@keyframes pd-fade-in {
+	from { opacity: 0; transform: translateY(2px); }
+	to { opacity: 1; transform: translateY(0); }
+}
