@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "rubrica_name",
+  "allowed_source",
   "disabled"
  ],
  "fields": [
@@ -17,6 +18,16 @@
    "reqd": 1,
    "unique": 1,
    "in_list_view": 1
+  },
+  {
+   "default": "Ambos",
+   "fieldname": "allowed_source",
+   "fieldtype": "Select",
+   "label": "Origem Permitida",
+   "options": "Manual\nAutomático (Fatura/PO)\nAmbos",
+   "in_list_view": 1,
+   "reqd": 1,
+   "description": "Define onde esta rubrica pode ser usada: lançamentos manuais, automáticos (Fatura de Compra/Encomenda), ou ambos."
   },
   {
    "default": "0",

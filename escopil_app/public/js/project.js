@@ -101,7 +101,14 @@ function render_budget_entries_section(frm) {
 			{ fieldname: 'source_type', label: __('Origem') },
 		],
 		dialog_fields: [
-			{ fieldname: 'rubrica', fieldtype: 'Link', options: 'Project Rubrica', label: __('Rubrica'), reqd: 1 },
+			{
+				fieldname: 'rubrica',
+				fieldtype: 'Link',
+				options: 'Project Rubrica',
+				label: __('Rubrica'),
+				reqd: 1,
+				get_query: () => ({ filters: { allowed_source: ['in', ['Manual', 'Ambos']], disabled: 0 } }),
+			},
 			{ fieldname: 'posting_date', fieldtype: 'Date', label: __('Data'), reqd: 1, default: frappe.datetime.get_today() },
 			{ fieldname: 'amount', fieldtype: 'Currency', label: __('Valor'), reqd: 1 },
 			{ fieldname: 'remarks', fieldtype: 'Small Text', label: __('Observações') },

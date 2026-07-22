@@ -1,6 +1,17 @@
 const RUBRICA_CASCADE_DOCTYPES = ['Material Request', 'Purchase Order', 'Purchase Invoice'];
 
+const RUBRICA_AUTOMATIC_FILTER = () => ({
+	filters: {
+		allowed_source: ['in', ['Automático (Fatura/PO)', 'Ambos']],
+		disabled: 0,
+	},
+});
+
 frappe.ui.form.on(RUBRICA_CASCADE_DOCTYPES, {
+	refresh(frm) {
+		frm.set_query('custom_rubrica', RUBRICA_AUTOMATIC_FILTER);
+		frm.set_query('custom_rubrica', 'items', RUBRICA_AUTOMATIC_FILTER);
+	},
 	custom_rubrica(frm) {
 		if (!frm.doc.custom_rubrica) return;
 		(frm.doc.items || []).forEach((item) => {
