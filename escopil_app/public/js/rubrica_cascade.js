@@ -15,9 +15,8 @@ frappe.ui.form.on(RUBRICA_CASCADE_DOCTYPES, {
 	custom_rubrica(frm) {
 		if (!frm.doc.custom_rubrica) return;
 		(frm.doc.items || []).forEach((item) => {
-			item.custom_rubrica = frm.doc.custom_rubrica;
+			frappe.model.set_value(item.doctype, item.name, 'custom_rubrica', frm.doc.custom_rubrica);
 		});
-		frm.refresh_field('items');
 	},
 });
 
