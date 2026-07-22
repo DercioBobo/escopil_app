@@ -1,3 +1,15 @@
+frappe.ui.form.on('Project Billing Forecast', {
+	custom_billing_forecast_overrides_add(frm, cdt, cdn) {
+		const row = frappe.get_doc(cdt, cdn);
+		if (frm.doc.custom_monthly_billing_forecast) {
+			row.amount = frm.doc.custom_monthly_billing_forecast;
+		}
+		const reference_date = frm.doc.expected_start_date || frappe.datetime.get_today();
+		row.year = frappe.datetime.str_to_obj(reference_date).getFullYear();
+		frm.refresh_field('custom_billing_forecast_overrides');
+	},
+});
+
 frappe.ui.form.on('Project', {
 	refresh(frm) {
 		if (frm.is_new()) {
@@ -12,7 +24,25 @@ frappe.ui.form.on('Project', {
 		frm.add_custom_button(__('Painel de Orçamento'), () => {
 			frappe.route_options = { project: frm.doc.name };
 			frappe.set_route('project-dashboard');
-		});
+		}, __('Custos e Faturação'));
+
+		frm.add_custom_button(__('Sincronizar Custos e Faturação'), () => {
+			frappe.call({
+				method: 'escopil_app.project_management.utils.sync_project_entries',
+				args: { project: frm.doc.name },
+				freeze: true,
+				freeze_message: __('A sincronizar custos e faturação...'),
+				callback: (r) => {
+					if (!r.message) return;
+					const { cost_created, billing_created } = r.message;
+					frappe.show_alert({
+						message: __('{0} novo(s) lançamento(s) de custo e {1} de faturação sincronizados.', [cost_created, billing_created]),
+						indicator: (cost_created || billing_created) ? 'green' : 'blue',
+					});
+					render_budget_entries_section(frm);
+				},
+			});
+		}, __('Custos e Faturação'));
 
 		frappe.require('/assets/escopil_app/css/project_dashboard.css', () => {
 			render_budget_entries_section(frm);

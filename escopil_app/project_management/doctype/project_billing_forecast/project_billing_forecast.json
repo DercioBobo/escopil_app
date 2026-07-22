@@ -5,15 +5,24 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "month",
+  "month_name",
+  "year",
   "amount"
  ],
  "fields": [
   {
-   "fieldname": "month",
-   "fieldtype": "Date",
+   "fieldname": "month_name",
+   "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Mês",
+   "options": "Janeiro\nFevereiro\nMarço\nAbril\nMaio\nJunho\nJulho\nAgosto\nSetembro\nOutubro\nNovembro\nDezembro",
+   "reqd": 1
+  },
+  {
+   "fieldname": "year",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Ano",
    "reqd": 1
   },
   {

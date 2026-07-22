@@ -65,3 +65,64 @@ def _sync(action, flag="in_project_cost_sync"):
 		action()
 	finally:
 		frappe.flags[flag] = False
+
+
+@frappe.whitelist()
+def sync_project_entries(project):
+	frappe.has_permission("Project", "write", doc=project, throw=True)
+
+	return {
+		"cost_created": _sync_missing_cost_entries(project),
+		"billing_created": _sync_missing_billing_entries(project),
+	}
+
+
+def _sync_missing_cost_entries(project):
+	pi_names = frappe.db.sql_list(
+		"""
+		select distinct pi.name
+		from `tabPurchase Invoice` pi
+		inner join `tabPurchase Invoice Item` item on item.parent = pi.name
+		where pi.docstatus = 1
+			and item.project = %s
+			and item.custom_rubrica is not null and item.custom_rubrica != ''
+		""",
+		project,
+	)
+
+	created = 0
+	for name in pi_names:
+		already_synced = frappe.db.exists(
+			"Project Cost Entry",
+			{"reference_doctype": "Purchase Invoice", "reference_name": name, "project": project},
+		)
+		if already_synced:
+			continue
+		create_cost_entries_from_purchase_invoice(frappe.get_doc("Purchase Invoice", name))
+		created += 1
+	return created
+
+
+def _sync_missing_billing_entries(project):
+	si_names = frappe.db.sql_list(
+		"""
+		select distinct si.name
+		from `tabSales Invoice` si
+		inner join `tabSales Invoice Item` item on item.parent = si.name
+		where si.docstatus = 1
+			and item.project = %s
+		""",
+		project,
+	)
+
+	created = 0
+	for name in si_names:
+		already_synced = frappe.db.exists(
+			"Project Billing Entry",
+			{"reference_doctype": "Sales Invoice", "reference_name": name, "project": project},
+		)
+		if already_synced:
+			continue
+		create_billing_entries_from_sales_invoice(frappe.get_doc("Sales Invoice", name))
+		created += 1
+	return created

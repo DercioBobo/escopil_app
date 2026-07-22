@@ -19,6 +19,9 @@ def _month_label(month_key):
 	return "{0}/{1}".format(MONTHS_PT[int(month) - 1], year)
 
 
+MONTH_NAME_TO_NUM = {name: i + 1 for i, name in enumerate(MONTHS_PT)}
+
+
 @frappe.whitelist()
 def get_dashboard_data(project):
 	project_doc = frappe.get_doc("Project", project)
@@ -39,10 +42,13 @@ def get_dashboard_data(project):
 	total_forecast = sum(flt(r.monthly_forecast) for r in rubrica_rows)
 
 	default_billing_forecast = flt(project_doc.custom_monthly_billing_forecast)
-	billing_forecast_overrides = {
-		_month_key(row.month): flt(row.amount)
-		for row in (project_doc.get("custom_billing_forecast_overrides") or [])
-	}
+	billing_forecast_overrides = {}
+	for row in (project_doc.get("custom_billing_forecast_overrides") or []):
+		month_num = MONTH_NAME_TO_NUM.get(row.month_name)
+		if not month_num or not row.year:
+			continue
+		billing_forecast_overrides["{0}-{1:02d}".format(int(row.year), month_num)] = flt(row.amount)
+
 	billing_forecast_by_month = {
 		m: billing_forecast_overrides.get(m, default_billing_forecast) for m in months
 	}
