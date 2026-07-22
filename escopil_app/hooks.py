@@ -90,6 +90,9 @@ after_migrate = "escopil_app.install.after_install"
 # Hook on document methods and events
 
 doc_events = {
+	"Project": {
+		"validate": "escopil_app.project_management.utils.validate_project_cost_control_tables",
+	},
 	"Purchase Invoice": {
 		"on_submit": "escopil_app.project_management.utils.create_cost_entries_from_purchase_invoice",
 		"on_cancel": "escopil_app.project_management.utils.remove_cost_entries_from_purchase_invoice",

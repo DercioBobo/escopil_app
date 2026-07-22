@@ -1,7 +1,40 @@
 from __future__ import unicode_literals
 
 import frappe
+from frappe import _
 from frappe.utils import flt
+
+
+def validate_project_cost_control_tables(doc, method=None):
+	_check_duplicate_billing_forecast_months(doc)
+	_check_duplicate_budget_rubricas(doc)
+
+
+def _check_duplicate_billing_forecast_months(doc):
+	seen = set()
+	for row in doc.get("custom_billing_forecast_overrides") or []:
+		if not row.month_name or not row.year:
+			continue
+		key = (row.month_name, row.year)
+		if key in seen:
+			frappe.throw(
+				_("Já existe uma previsão de faturação para {0}/{1} na tabela de Ajustes Mensais.").format(
+					row.month_name, row.year
+				)
+			)
+		seen.add(key)
+
+
+def _check_duplicate_budget_rubricas(doc):
+	seen = set()
+	for row in doc.get("custom_budget_rubricas") or []:
+		if not row.rubrica:
+			continue
+		if row.rubrica in seen:
+			frappe.throw(
+				_("A rubrica {0} já está na tabela de Rubricas do Orçamento.").format(row.rubrica)
+			)
+		seen.add(row.rubrica)
 
 
 def create_cost_entries_from_purchase_invoice(doc, method=None):
