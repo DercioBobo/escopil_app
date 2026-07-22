@@ -3,10 +3,16 @@ from __future__ import unicode_literals
 custom_fields = {
 	"Project": [
 		dict(
-			fieldname="custom_cost_control_enabled",
+			fieldname="custom_cost_control_section",
 			label="Controlo de Custos e Faturação",
-			fieldtype="Check",
+			fieldtype="Section Break",
 			insert_after="cost_center",
+		),
+		dict(
+			fieldname="custom_cost_control_enabled",
+			label="Ativar Controlo de Custos e Faturação",
+			fieldtype="Check",
+			insert_after="custom_cost_control_section",
 			description="Ativa o Painel de Orçamento e as secções de Custos/Faturação para este projeto.",
 		),
 		dict(
