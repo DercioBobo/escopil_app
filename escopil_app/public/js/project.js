@@ -10,11 +10,33 @@ frappe.ui.form.on('Project Billing Forecast', {
 	},
 });
 
+const HIDDEN_NATIVE_BUTTONS = ['Duplicate Project with Tasks', 'Gantt Chart', 'Kanban Board'];
+
+function hide_native_project_buttons(frm) {
+	HIDDEN_NATIVE_BUTTONS.forEach((label) => {
+		frm.remove_custom_button(__(label));
+		frm.remove_custom_button(label);
+	});
+
+	// some of these live inside dropdown groups (e.g. "View"); the exact group
+	// name isn't guaranteed across ERPNext versions, so sweep by visible text
+	// as a fallback once the toolbar has finished rendering
+	setTimeout(() => {
+		frm.page.wrapper.find('.custom-actions .dropdown-item, .custom-actions button, .menu-btn-group .dropdown-item').each(function () {
+			if (HIDDEN_NATIVE_BUTTONS.includes($(this).text().trim())) {
+				$(this).remove();
+			}
+		});
+	}, 0);
+}
+
 frappe.ui.form.on('Project', {
 	refresh(frm) {
 		if (frm.is_new()) {
 			return;
 		}
+
+		hide_native_project_buttons(frm);
 
 		if (!frm.doc.custom_cost_control_enabled) {
 			frm.dashboard.parent.find('.pd-embedded-entries').remove();
