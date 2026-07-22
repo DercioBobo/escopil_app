@@ -10,6 +10,7 @@
   "allowed_source",
   "disabled"
  ],
+ "quick_entry": 1,
  "fields": [
   {
    "fieldname": "rubrica_name",
@@ -17,7 +18,8 @@
    "label": "Nome da Rubrica",
    "reqd": 1,
    "unique": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "allow_in_quick_entry": 1
   },
   {
    "default": "Ambos",
@@ -27,13 +29,15 @@
    "options": "Manual\nAutomático (Fatura/PO)\nAmbos",
    "in_list_view": 1,
    "reqd": 1,
-   "description": "Define onde esta rubrica pode ser usada: lançamentos manuais, automáticos (Fatura de Compra/Encomenda), ou ambos."
+   "description": "Define onde esta rubrica pode ser usada: lançamentos manuais, automáticos (Fatura de Compra/Encomenda), ou ambos.",
+   "allow_in_quick_entry": 1
   },
   {
    "default": "0",
    "fieldname": "disabled",
    "fieldtype": "Check",
-   "label": "Desativado"
+   "label": "Desativado",
+   "allow_in_quick_entry": 1
   }
  ],
  "index_web_pages_for_search": 1,
