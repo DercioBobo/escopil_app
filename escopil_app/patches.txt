@@ -1,3 +1,5 @@
 [pre_model_sync]
 
 [post_model_sync]
+escopil_app.patches.backfill_project_billing_entries
+escopil_app.patches.backfill_project_cost_entries

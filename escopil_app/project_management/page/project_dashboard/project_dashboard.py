@@ -59,7 +59,8 @@ def get_dashboard_data(project):
 	)
 	billing_map = {}
 	for row in billing_rows:
-		billing_map[_month_key(row.month)] = flt(row.billable_amount)
+		month_key = _month_key(row.month)
+		billing_map[month_key] = billing_map.get(month_key, 0) + flt(row.billable_amount)
 
 	rubricas = []
 	totals_by_month = {m: 0.0 for m in months}

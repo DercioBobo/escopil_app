@@ -7,6 +7,11 @@
   "project",
   "month",
   "billable_amount",
+  "source_type",
+  "column_break_1",
+  "reference_doctype",
+  "reference_name",
+  "is_auto_generated",
   "remarks"
  ],
  "fields": [
@@ -32,6 +37,38 @@
    "in_list_view": 1,
    "label": "Valor a Cobrar",
    "reqd": 1
+  },
+  {
+   "default": "Manual",
+   "fieldname": "source_type",
+   "fieldtype": "Select",
+   "label": "Origem",
+   "options": "Manual\nSales Invoice"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Tipo de Referência",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Referência",
+   "options": "reference_doctype",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_auto_generated",
+   "fieldtype": "Check",
+   "label": "Gerado Automaticamente",
+   "read_only": 1
   },
   {
    "fieldname": "remarks",

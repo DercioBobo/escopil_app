@@ -4,6 +4,11 @@ frappe.ui.form.on('Project', {
 			return;
 		}
 
+		if (!frm.doc.custom_cost_control_enabled) {
+			frm.dashboard.parent.find('.pd-embedded-entries').remove();
+			return;
+		}
+
 		frm.add_custom_button(__('Painel de Orçamento'), () => {
 			frappe.route_options = { project: frm.doc.name };
 			frappe.set_route('project-dashboard');
@@ -58,9 +63,11 @@ function render_budget_entries_section(frm) {
 		doctype: 'Project Billing Entry',
 		add_label: __('Adicionar Faturação'),
 		order_by: 'month desc',
+		lock_field: 'is_auto_generated',
 		columns: [
 			{ fieldname: 'month', label: __('Mês'), format: (v) => frappe.datetime.str_to_user(v) },
 			{ fieldname: 'billable_amount', label: __('Valor a Cobrar'), format: (v) => format_currency(v) },
+			{ fieldname: 'source_type', label: __('Origem') },
 		],
 		dialog_fields: [
 			{ fieldname: 'month', fieldtype: 'Date', label: __('Mês'), reqd: 1, default: frappe.datetime.get_today() },

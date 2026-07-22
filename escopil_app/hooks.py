@@ -92,7 +92,11 @@ doc_events = {
 	"Purchase Invoice": {
 		"on_submit": "escopil_app.project_management.utils.create_cost_entries_from_purchase_invoice",
 		"on_cancel": "escopil_app.project_management.utils.remove_cost_entries_from_purchase_invoice",
-	}
+	},
+	"Sales Invoice": {
+		"on_submit": "escopil_app.project_management.utils.create_billing_entries_from_sales_invoice",
+		"on_cancel": "escopil_app.project_management.utils.remove_billing_entries_from_sales_invoice",
+	},
 }
 
 # Scheduled Tasks

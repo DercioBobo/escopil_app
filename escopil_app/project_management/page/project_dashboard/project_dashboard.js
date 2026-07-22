@@ -40,6 +40,7 @@ class ProjectDashboard {
 				fieldname: 'project',
 				label: 'Projeto',
 				options: 'Project',
+				get_query: () => ({ filters: { custom_cost_control_enabled: 1 } }),
 				onchange: () => {
 					const project = this.project_control.get_value();
 					if (project) {
