@@ -30,6 +30,37 @@ def remove_cost_entries_from_purchase_invoice(doc, method=None):
 		_sync(lambda: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
 
 
+def create_cost_entries_from_purchase_order(doc, method=None):
+	# Petty Cash POs never turn into a Purchase Invoice, so they're the real
+	# cost here and now, not just a commitment
+	if doc.get("buying_mode") != "Petty Cash":
+		return
+
+	for item in doc.items:
+		if item.project and item.get("custom_rubrica"):
+			_sync(lambda item=item: frappe.get_doc({
+				"doctype": "Project Cost Entry",
+				"project": item.project,
+				"rubrica": item.custom_rubrica,
+				"posting_date": doc.transaction_date,
+				"amount": item.base_net_amount,
+				"source_type": "Purchase Order (Petty Cash)",
+				"reference_doctype": "Purchase Order",
+				"reference_name": doc.name,
+				"is_auto_generated": 1,
+			}).insert(ignore_permissions=True), flag="in_project_cost_sync")
+
+
+def remove_cost_entries_from_purchase_order(doc, method=None):
+	names = frappe.get_all(
+		"Project Cost Entry",
+		filters={"reference_doctype": "Purchase Order", "reference_name": doc.name},
+		pluck="name",
+	)
+	for name in names:
+		_sync(lambda: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
+
+
 def create_billing_entries_from_sales_invoice(doc, method=None):
 	amount_by_project = {}
 	for item in doc.items:
@@ -72,7 +103,7 @@ def sync_project_entries(project):
 	frappe.has_permission("Project", "write", doc=project, throw=True)
 
 	return {
-		"cost_created": _sync_missing_cost_entries(project),
+		"cost_created": _sync_missing_cost_entries(project) + _sync_missing_petty_cash_entries(project),
 		"billing_created": _sync_missing_billing_entries(project),
 	}
 
@@ -99,6 +130,33 @@ def _sync_missing_cost_entries(project):
 		if already_synced:
 			continue
 		create_cost_entries_from_purchase_invoice(frappe.get_doc("Purchase Invoice", name))
+		created += 1
+	return created
+
+
+def _sync_missing_petty_cash_entries(project):
+	po_names = frappe.db.sql_list(
+		"""
+		select distinct po.name
+		from `tabPurchase Order` po
+		inner join `tabPurchase Order Item` item on item.parent = po.name
+		where po.docstatus = 1
+			and po.buying_mode = 'Petty Cash'
+			and item.project = %s
+			and item.custom_rubrica is not null and item.custom_rubrica != ''
+		""",
+		project,
+	)
+
+	created = 0
+	for name in po_names:
+		already_synced = frappe.db.exists(
+			"Project Cost Entry",
+			{"reference_doctype": "Purchase Order", "reference_name": name, "project": project},
+		)
+		if already_synced:
+			continue
+		create_cost_entries_from_purchase_order(frappe.get_doc("Purchase Order", name))
 		created += 1
 	return created
 

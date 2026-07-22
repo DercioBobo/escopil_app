@@ -54,7 +54,7 @@
    "fieldname": "source_type",
    "fieldtype": "Select",
    "label": "Origem",
-   "options": "Manual\nPurchase Invoice"
+   "options": "Manual\nPurchase Invoice\nPurchase Order (Petty Cash)"
   },
   {
    "fieldname": "column_break_1",

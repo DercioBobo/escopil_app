@@ -133,6 +133,7 @@ class ProjectDashboard {
 		const n_months = months.length || 1;
 
 		const total_cost = months.reduce((s, m) => s + (data.totals[m.key] || 0), 0);
+		const total_committed = months.reduce((s, m) => s + (data.committed[m.key] || 0), 0);
 		const total_billing = months.reduce((s, m) => s + (data.billing[m.key] || 0), 0);
 		const total_billing_forecast = months.reduce((s, m) => s + (data.billing_forecast[m.key] || 0), 0);
 		const total_margin = total_billing - total_cost;
@@ -150,6 +151,11 @@ class ProjectDashboard {
 					<span class="pd-stat-label">Custos Reais</span>
 					<span class="pd-stat-value">${fmt(total_cost)}</span>
 					<span class="pd-stat-sub">${budget_total ? pct(total_cost / budget_total * 100) : '—'} do orçamento</span>
+				</div>
+				<div class="pd-stat">
+					<span class="pd-stat-label">Custos Comprometidos</span>
+					<span class="pd-stat-value">${fmt(total_committed)}</span>
+					<span class="pd-stat-sub">Encomendado, ainda não faturado</span>
 				</div>
 				<div class="pd-stat">
 					<span class="pd-stat-label">Previsão de Faturação</span>
@@ -204,6 +210,13 @@ class ProjectDashboard {
 			</tr>
 		`;
 
+		const committed_row = `
+			<tr class="pd-row-committed">
+				<td class="text-left" colspan="3">Custos Comprometidos</td>
+				${months.map(m => `<td class="text-right">${fmt(data.committed[m.key])}</td>`).join('')}
+			</tr>
+		`;
+
 		const billing_forecast_row = `
 			<tr class="pd-row-billing-forecast">
 				<td class="text-left" colspan="3">Valor a Cobrar</td>
@@ -252,7 +265,7 @@ class ProjectDashboard {
 				<div class="pd-table-wrap">
 					<table class="pd-ledger">
 						<thead>${head}</thead>
-						<tbody>${body}${total_row}${billing_forecast_row}${billing_row}${margin_row}${margin_pct_row}</tbody>
+						<tbody>${body}${total_row}${committed_row}${billing_forecast_row}${billing_row}${margin_row}${margin_pct_row}</tbody>
 					</table>
 				</div>
 			</div>

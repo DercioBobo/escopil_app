@@ -67,6 +67,24 @@ def get_dashboard_data(project):
 	for row in actuals:
 		actuals_map.setdefault(row.rubrica, {})[row.month_key] = flt(row.total)
 
+	committed_rows = frappe.db.sql(
+		"""
+		select date_format(po.transaction_date, '%%Y-%%m') as month_key,
+			sum(item.amount - item.billed_amt) as total
+		from `tabPurchase Order` po
+		inner join `tabPurchase Order Item` item on item.parent = po.name
+		where po.docstatus = 1
+			and ifnull(po.buying_mode, '') != 'Petty Cash'
+			and item.project = %(project)s
+			and item.custom_rubrica is not null and item.custom_rubrica != ''
+		group by month_key
+		having total > 0
+		""",
+		{"project": project},
+		as_dict=True,
+	)
+	committed_map = {row.month_key: flt(row.total) for row in committed_rows}
+
 	billing_rows = frappe.get_all(
 		"Project Billing Entry",
 		filters={"project": project},
@@ -103,6 +121,7 @@ def get_dashboard_data(project):
 		"rubricas": rubricas,
 		"total_forecast": total_forecast,
 		"totals": totals_by_month,
+		"committed": {m: flt(committed_map.get(m)) for m in months},
 		"billing": {m: flt(billing_map.get(m)) for m in months},
 		"billing_forecast": billing_forecast_by_month,
 		"margin": margin_by_month,
