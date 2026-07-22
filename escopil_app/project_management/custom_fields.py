@@ -10,6 +10,36 @@ custom_fields = {
 			insert_after="cost_center",
 		),
 	],
+	"Material Request": [
+		dict(
+			fieldname="custom_rubrica",
+			label="Rubrica (Padrão)",
+			fieldtype="Link",
+			options="Project Rubrica",
+			insert_after="project",
+			description="Aplica esta rubrica a todos os itens abaixo.",
+		),
+	],
+	"Purchase Order": [
+		dict(
+			fieldname="custom_rubrica",
+			label="Rubrica (Padrão)",
+			fieldtype="Link",
+			options="Project Rubrica",
+			insert_after="project",
+			description="Aplica esta rubrica a todos os itens abaixo.",
+		),
+	],
+	"Purchase Invoice": [
+		dict(
+			fieldname="custom_rubrica",
+			label="Rubrica (Padrão)",
+			fieldtype="Link",
+			options="Project Rubrica",
+			insert_after="project",
+			description="Aplica esta rubrica a todos os itens abaixo.",
+		),
+	],
 	"Material Request Item": [
 		dict(
 			fieldname="custom_rubrica",

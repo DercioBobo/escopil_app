@@ -88,7 +88,7 @@
 }
 .project-dashboard .pd-stat-value {
 	font-variant-numeric: tabular-nums;
-	font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+	font-family: var(--font-stack, "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif);
 	font-size: 20px;
 	font-weight: 600;
 	line-height: 1.15;
@@ -156,7 +156,7 @@
 .project-dashboard table.pd-ledger td.text-right,
 .project-dashboard table.pd-ledger th.text-right {
 	text-align: right;
-	font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+	font-family: var(--font-stack, "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif);
 }
 .project-dashboard table.pd-ledger tbody tr:hover td {
 	background: rgba(var(--pd-amber-rgb), 0.06);
