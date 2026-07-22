@@ -10,6 +10,12 @@ frappe.pages['project-dashboard'].on_page_load = function (wrapper) {
 	});
 };
 
+frappe.pages['project-dashboard'].on_page_show = function () {
+	if (frappe.project_dashboard) {
+		frappe.project_dashboard.check_route_options();
+	}
+};
+
 class ProjectDashboard {
 	constructor(page) {
 		this.page = page;
@@ -47,7 +53,21 @@ class ProjectDashboard {
 		});
 		this.project_control.refresh();
 
-		this.render_empty();
+		if (!this.check_route_options()) {
+			this.render_empty();
+		}
+	}
+
+	// consumes frappe.route_options.project so a "Painel de Orçamento" button
+	// on the Project form can deep-link straight into this page
+	check_route_options() {
+		const options = frappe.route_options;
+		if (options && options.project) {
+			frappe.route_options = null;
+			this.project_control.set_value(options.project);
+			return true;
+		}
+		return false;
 	}
 
 	render_empty() {

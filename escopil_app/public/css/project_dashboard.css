@@ -223,6 +223,66 @@
 	letter-spacing: 0.08em;
 }
 
+/* ---- Embedded entry tables (Project form section) ---- */
+.project-dashboard.pd-embedded-entries {
+	padding: 4px 0 0;
+}
+.project-dashboard .pd-entry-block + .pd-entry-block {
+	margin-top: 22px;
+}
+.project-dashboard .pd-entry-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	border-bottom: 1px solid var(--pd-rule);
+	padding-bottom: 6px;
+	margin-bottom: 10px;
+}
+.project-dashboard .pd-entry-head .pd-eyebrow {
+	border-bottom: none;
+	padding-bottom: 0;
+	margin: 0;
+}
+.project-dashboard .pd-entry-add {
+	background: transparent;
+	border: 1px solid var(--pd-rule);
+	border-radius: 3px;
+	color: var(--pd-ink);
+	font-size: 10.5px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	padding: 4px 10px;
+	cursor: pointer;
+}
+.project-dashboard .pd-entry-add:hover {
+	border-color: var(--pd-amber);
+	color: var(--pd-amber);
+}
+.project-dashboard table.pd-ledger-compact th,
+.project-dashboard table.pd-ledger-compact td {
+	padding: 6px 10px;
+	font-size: 12px;
+}
+.project-dashboard tr.pd-entry-row {
+	cursor: pointer;
+}
+.project-dashboard tr.pd-entry-row:hover td {
+	background: rgba(var(--pd-amber-rgb), 0.08);
+}
+.project-dashboard tr.pd-entry-row.pd-row-locked {
+	cursor: not-allowed;
+	color: var(--pd-slate);
+}
+.project-dashboard tr.pd-entry-row.pd-row-locked:hover td {
+	background: transparent;
+}
+.project-dashboard .pd-empty-inline {
+	padding: 14px 2px;
+	text-align: left;
+	font-size: 12px;
+}
+
 .project-dashboard .pd-fade {
 	animation: pd-fade-in 0.18s ease-out;
 }
