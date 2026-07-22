@@ -65,7 +65,7 @@
 /* ---- KPI strip ---- */
 .project-dashboard .pd-strip {
 	display: grid;
-	grid-template-columns: repeat(4, minmax(140px, 1fr));
+	grid-template-columns: repeat(5, minmax(140px, 1fr));
 	gap: 1px;
 	background: var(--pd-rule);
 	border: 1px solid var(--pd-rule);
@@ -195,6 +195,7 @@
 	border-top: 2px solid var(--pd-rule);
 	font-weight: 700;
 }
+.project-dashboard tr.pd-row-billing-forecast td,
 .project-dashboard tr.pd-row-billing td,
 .project-dashboard tr.pd-row-margin td,
 .project-dashboard tr.pd-row-margin-pct td {
@@ -216,6 +217,7 @@
 }
 .project-dashboard tr.pd-row-margin td.text-left,
 .project-dashboard tr.pd-row-billing td.text-left,
+.project-dashboard tr.pd-row-billing-forecast td.text-left,
 .project-dashboard tr.pd-row-margin-pct td.text-left,
 .project-dashboard tr.pd-row-total td.text-left {
 	text-transform: uppercase;

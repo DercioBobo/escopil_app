@@ -38,6 +38,15 @@ def get_dashboard_data(project):
 	rubrica_rows = project_doc.get("custom_budget_rubricas") or []
 	total_forecast = sum(flt(r.monthly_forecast) for r in rubrica_rows)
 
+	default_billing_forecast = flt(project_doc.custom_monthly_billing_forecast)
+	billing_forecast_overrides = {
+		_month_key(row.month): flt(row.amount)
+		for row in (project_doc.get("custom_billing_forecast_overrides") or [])
+	}
+	billing_forecast_by_month = {
+		m: billing_forecast_overrides.get(m, default_billing_forecast) for m in months
+	}
+
 	actuals = frappe.db.sql(
 		"""
 		select rubrica, date_format(posting_date, '%%Y-%%m') as month_key, sum(amount) as total
@@ -89,6 +98,7 @@ def get_dashboard_data(project):
 		"total_forecast": total_forecast,
 		"totals": totals_by_month,
 		"billing": {m: flt(billing_map.get(m)) for m in months},
+		"billing_forecast": billing_forecast_by_month,
 		"margin": margin_by_month,
 		"margin_pct": margin_pct_by_month,
 	}

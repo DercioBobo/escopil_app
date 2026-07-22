@@ -108,6 +108,24 @@ class ProjectDashboard {
 		return { cls: '', alpha: 0 };
 	}
 
+	// billing variance is inverted vs. cost variance: meeting/exceeding the
+	// monthly billing target is good (green), falling short is bad (rust)
+	billing_variance_class(actual, forecast) {
+		if (!forecast) {
+			return actual ? { cls: 'pd-variance-under', alpha: 0.16 } : { cls: '', alpha: 0 };
+		}
+		const ratio = actual / forecast;
+		if (ratio >= 1.1) {
+			const severity = Math.min((ratio - 1.1) / 1.1, 1);
+			return { cls: 'pd-variance-under', alpha: 0.08 + severity * 0.18 };
+		}
+		if (ratio < 0.9) {
+			const severity = Math.min((0.9 - ratio) / 0.9, 1);
+			return { cls: 'pd-variance-over', alpha: 0.08 + severity * 0.22 };
+		}
+		return { cls: '', alpha: 0 };
+	}
+
 	render(data) {
 		const fmt = (v) => format_currency(v || 0);
 		const pct = (v) => (v || 0).toFixed(1) + '%';
@@ -116,6 +134,7 @@ class ProjectDashboard {
 
 		const total_cost = months.reduce((s, m) => s + (data.totals[m.key] || 0), 0);
 		const total_billing = months.reduce((s, m) => s + (data.billing[m.key] || 0), 0);
+		const total_billing_forecast = months.reduce((s, m) => s + (data.billing_forecast[m.key] || 0), 0);
 		const total_margin = total_billing - total_cost;
 		const total_margin_pct = total_billing ? (total_margin / total_billing * 100) : 0;
 		const budget_total = (data.total_forecast || 0) * n_months;
@@ -133,9 +152,14 @@ class ProjectDashboard {
 					<span class="pd-stat-sub">${budget_total ? pct(total_cost / budget_total * 100) : '—'} do orçamento</span>
 				</div>
 				<div class="pd-stat">
-					<span class="pd-stat-label">Valor a Cobrar</span>
-					<span class="pd-stat-value">${fmt(total_billing)}</span>
+					<span class="pd-stat-label">Previsão de Faturação</span>
+					<span class="pd-stat-value">${fmt(total_billing_forecast)}</span>
 					<span class="pd-stat-sub">&nbsp;</span>
+				</div>
+				<div class="pd-stat">
+					<span class="pd-stat-label">Valor Faturado</span>
+					<span class="pd-stat-value">${fmt(total_billing)}</span>
+					<span class="pd-stat-sub">${total_billing_forecast ? pct(total_billing / total_billing_forecast * 100) : '—'} da previsão</span>
 				</div>
 				<div class="pd-stat">
 					<span class="pd-stat-label">Margem</span>
@@ -180,10 +204,22 @@ class ProjectDashboard {
 			</tr>
 		`;
 
+		const billing_forecast_row = `
+			<tr class="pd-row-billing-forecast">
+				<td class="text-left" colspan="3">Valor a Cobrar</td>
+				${months.map(m => `<td class="text-right">${fmt(data.billing_forecast[m.key])}</td>`).join('')}
+			</tr>
+		`;
+
 		const billing_row = `
 			<tr class="pd-row-billing">
-				<td class="text-left" colspan="3">Valor a Cobrar</td>
-				${months.map(m => `<td class="text-right">${fmt(data.billing[m.key])}</td>`).join('')}
+				<td class="text-left" colspan="3">Valor Faturado</td>
+				${months.map(m => {
+					const actual = data.billing[m.key] || 0;
+					const v = this.billing_variance_class(actual, data.billing_forecast[m.key]);
+					const style = v.cls ? ` style="--pd-alpha:${v.alpha}"` : '';
+					return `<td class="text-right ${v.cls}"${style}>${fmt(actual)}</td>`;
+				}).join('')}
 			</tr>
 		`;
 
@@ -216,7 +252,7 @@ class ProjectDashboard {
 				<div class="pd-table-wrap">
 					<table class="pd-ledger">
 						<thead>${head}</thead>
-						<tbody>${body}${total_row}${billing_row}${margin_row}${margin_pct_row}</tbody>
+						<tbody>${body}${total_row}${billing_forecast_row}${billing_row}${margin_row}${margin_pct_row}</tbody>
 					</table>
 				</div>
 			</div>

@@ -35,7 +35,7 @@
    "fieldname": "billable_amount",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Valor a Cobrar",
+   "label": "Valor Faturado",
    "reqd": 1
   },
   {

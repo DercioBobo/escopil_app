@@ -65,6 +65,7 @@ doctype_js = {
 
 # before_install = "escopil_app.install.before_install"
 after_install = "escopil_app.install.after_install"
+after_migrate = "escopil_app.install.after_install"
 
 # Desk Notifications
 # -------------------

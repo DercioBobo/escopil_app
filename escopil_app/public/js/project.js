@@ -66,12 +66,12 @@ function render_budget_entries_section(frm) {
 		lock_field: 'is_auto_generated',
 		columns: [
 			{ fieldname: 'month', label: __('Mês'), format: (v) => frappe.datetime.str_to_user(v) },
-			{ fieldname: 'billable_amount', label: __('Valor a Cobrar'), format: (v) => format_currency(v) },
+			{ fieldname: 'billable_amount', label: __('Valor Faturado'), format: (v) => format_currency(v) },
 			{ fieldname: 'source_type', label: __('Origem') },
 		],
 		dialog_fields: [
 			{ fieldname: 'month', fieldtype: 'Date', label: __('Mês'), reqd: 1, default: frappe.datetime.get_today() },
-			{ fieldname: 'billable_amount', fieldtype: 'Currency', label: __('Valor a Cobrar'), reqd: 1 },
+			{ fieldname: 'billable_amount', fieldtype: 'Currency', label: __('Valor Faturado'), reqd: 1 },
 			{ fieldname: 'remarks', fieldtype: 'Small Text', label: __('Observações') },
 		],
 	});
