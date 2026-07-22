@@ -17,17 +17,23 @@ frappe.ui.form.on('Project', {
 
 function render_budget_entries_section(frm) {
 	frm.dashboard.wrapper.find('.pd-embedded-entries').remove();
+
 	frm.dashboard.add_section(
-		'<div class="project-dashboard pd-embedded-entries"></div>',
-		__('Custos e Faturação do Projeto')
+		'<div class="project-dashboard pd-embedded-entries pd-embedded-entries-costs"></div>',
+		__('Custos do Projeto')
 	);
-	const $wrapper = frm.dashboard.wrapper.find('.pd-embedded-entries');
+	const $costs_wrapper = frm.dashboard.wrapper.find('.pd-embedded-entries-costs');
+
+	frm.dashboard.add_section(
+		'<div class="project-dashboard pd-embedded-entries pd-embedded-entries-billing"></div>',
+		__('Faturação do Projeto')
+	);
+	const $billing_wrapper = frm.dashboard.wrapper.find('.pd-embedded-entries-billing');
 
 	new ProjectEntryTable({
 		frm,
-		wrapper: $wrapper,
+		wrapper: $costs_wrapper,
 		doctype: 'Project Cost Entry',
-		title: __('Custos'),
 		add_label: __('Adicionar Custo'),
 		order_by: 'posting_date desc',
 		lock_field: 'is_auto_generated',
@@ -48,9 +54,8 @@ function render_budget_entries_section(frm) {
 
 	new ProjectEntryTable({
 		frm,
-		wrapper: $wrapper,
+		wrapper: $billing_wrapper,
 		doctype: 'Project Billing Entry',
-		title: __('Faturação'),
 		add_label: __('Adicionar Faturação'),
 		order_by: 'month desc',
 		columns: [
@@ -66,7 +71,7 @@ function render_budget_entries_section(frm) {
 }
 
 class ProjectEntryTable {
-	constructor({ frm, wrapper, doctype, title, add_label, columns, dialog_fields, default_values, order_by, lock_field }) {
+	constructor({ frm, wrapper, doctype, add_label, columns, dialog_fields, default_values, order_by, lock_field }) {
 		this.frm = frm;
 		this.doctype = doctype;
 		this.columns = columns;
@@ -78,7 +83,6 @@ class ProjectEntryTable {
 		this.$wrapper = $(`
 			<div class="pd-entry-block">
 				<div class="pd-entry-head">
-					<h6 class="pd-eyebrow">${frappe.utils.escape_html(title)}</h6>
 					<button class="pd-entry-add" type="button">+ ${frappe.utils.escape_html(add_label)}</button>
 				</div>
 				<div class="pd-entry-table-wrap"></div>
