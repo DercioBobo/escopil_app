@@ -54,6 +54,22 @@ class ProjectDashboard {
 		});
 		this.project_control.refresh();
 
+		this.page.add_inner_button(__('Voltar ao Projeto'), () => {
+			const project = this.project_control.get_value();
+			if (project) {
+				frappe.set_route('Form', 'Project', project);
+			} else {
+				window.history.back();
+			}
+		});
+
+		this.page.add_inner_button(__('Atualizar'), () => {
+			const project = this.project_control.get_value();
+			if (project) {
+				this.load(project);
+			}
+		});
+
 		if (!this.check_route_options()) {
 			this.render_empty();
 		}
