@@ -9,13 +9,21 @@ frappe.ui.form.on('Project', {
 			frappe.set_route('project-dashboard');
 		});
 
+		console.log('[escopil_app] requiring project_dashboard.css');
 		frappe.require('/assets/escopil_app/css/project_dashboard.css', () => {
-			render_budget_entries_section(frm);
+			console.log('[escopil_app] css loaded, calling render_budget_entries_section');
+			try {
+				render_budget_entries_section(frm);
+				console.log('[escopil_app] render_budget_entries_section finished OK');
+			} catch (e) {
+				console.error('[escopil_app] render_budget_entries_section threw', e);
+			}
 		});
 	}
 });
 
 function render_budget_entries_section(frm) {
+	console.log('[escopil_app] render_budget_entries_section start, dashboard=', frm.dashboard);
 	frm.dashboard.wrapper.find('.pd-embedded-entries').remove();
 
 	frm.dashboard.add_section(
@@ -23,12 +31,14 @@ function render_budget_entries_section(frm) {
 		__('Custos do Projeto')
 	);
 	const $costs_wrapper = frm.dashboard.wrapper.find('.pd-embedded-entries-costs');
+	console.log('[escopil_app] costs wrapper found?', $costs_wrapper.length);
 
 	frm.dashboard.add_section(
 		'<div class="project-dashboard pd-embedded-entries pd-embedded-entries-billing"></div>',
 		__('Faturação do Projeto')
 	);
 	const $billing_wrapper = frm.dashboard.wrapper.find('.pd-embedded-entries-billing');
+	console.log('[escopil_app] billing wrapper found?', $billing_wrapper.length);
 
 	new ProjectEntryTable({
 		frm,
