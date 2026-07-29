@@ -4,3 +4,5 @@
 escopil_app.patches.backfill_project_billing_entries
 escopil_app.patches.backfill_project_cost_entries
 escopil_app.patches.backfill_petty_cash_cost_entries
+escopil_app.patches.backfill_stock_entry_cost_entries
+escopil_app.patches.backfill_vehicle_log_cost_entries

@@ -4,6 +4,9 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+MATERIAL_ISSUE_RUBRICA = "Consumiveis"
+FUEL_RUBRICA = "Combustivel"
+
 
 def validate_project_cost_control_tables(doc, method=None):
 	_check_duplicate_billing_forecast_months(doc)
@@ -94,6 +97,62 @@ def remove_cost_entries_from_purchase_order(doc, method=None):
 		_sync(lambda: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
 
 
+def create_cost_entries_from_stock_entry(doc, method=None):
+	if doc.stock_entry_type != "Material Issue" or not doc.project:
+		return
+	if not flt(doc.total_outgoing_value):
+		return
+
+	_sync(lambda: frappe.get_doc({
+		"doctype": "Project Cost Entry",
+		"project": doc.project,
+		"rubrica": MATERIAL_ISSUE_RUBRICA,
+		"posting_date": doc.posting_date,
+		"amount": doc.total_outgoing_value,
+		"source_type": "Stock Entry (Material Issue)",
+		"reference_doctype": "Stock Entry",
+		"reference_name": doc.name,
+		"is_auto_generated": 1,
+	}).insert(ignore_permissions=True), flag="in_project_cost_sync")
+
+
+def remove_cost_entries_from_stock_entry(doc, method=None):
+	names = frappe.get_all(
+		"Project Cost Entry",
+		filters={"reference_doctype": "Stock Entry", "reference_name": doc.name},
+		pluck="name",
+	)
+	for name in names:
+		_sync(lambda: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
+
+
+def create_cost_entries_from_vehicle_log(doc, method=None):
+	if not doc.get("project") or not flt(doc.get("total_paid")):
+		return
+
+	_sync(lambda: frappe.get_doc({
+		"doctype": "Project Cost Entry",
+		"project": doc.project,
+		"rubrica": FUEL_RUBRICA,
+		"posting_date": doc.date,
+		"amount": doc.total_paid,
+		"source_type": "Vehicle Log",
+		"reference_doctype": "Vehicle Log",
+		"reference_name": doc.name,
+		"is_auto_generated": 1,
+	}).insert(ignore_permissions=True), flag="in_project_cost_sync")
+
+
+def remove_cost_entries_from_vehicle_log(doc, method=None):
+	names = frappe.get_all(
+		"Project Cost Entry",
+		filters={"reference_doctype": "Vehicle Log", "reference_name": doc.name},
+		pluck="name",
+	)
+	for name in names:
+		_sync(lambda: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
+
+
 def create_billing_entries_from_sales_invoice(doc, method=None):
 	amount_by_project = {}
 	for item in doc.items:
@@ -136,7 +195,12 @@ def sync_project_entries(project):
 	frappe.has_permission("Project", "write", doc=project, throw=True)
 
 	return {
-		"cost_created": _sync_missing_cost_entries(project) + _sync_missing_petty_cash_entries(project),
+		"cost_created": (
+			_sync_missing_cost_entries(project)
+			+ _sync_missing_petty_cash_entries(project)
+			+ _sync_missing_stock_entry_cost_entries(project)
+			+ _sync_missing_vehicle_log_cost_entries(project)
+		),
 		"billing_created": _sync_missing_billing_entries(project),
 	}
 
@@ -190,6 +254,46 @@ def _sync_missing_petty_cash_entries(project):
 		if already_synced:
 			continue
 		create_cost_entries_from_purchase_order(frappe.get_doc("Purchase Order", name))
+		created += 1
+	return created
+
+
+def _sync_missing_stock_entry_cost_entries(project):
+	se_names = frappe.get_all(
+		"Stock Entry",
+		filters={"docstatus": 1, "stock_entry_type": "Material Issue", "project": project},
+		pluck="name",
+	)
+
+	created = 0
+	for name in se_names:
+		already_synced = frappe.db.exists(
+			"Project Cost Entry",
+			{"reference_doctype": "Stock Entry", "reference_name": name, "project": project},
+		)
+		if already_synced:
+			continue
+		create_cost_entries_from_stock_entry(frappe.get_doc("Stock Entry", name))
+		created += 1
+	return created
+
+
+def _sync_missing_vehicle_log_cost_entries(project):
+	vl_names = frappe.get_all(
+		"Vehicle Log",
+		filters={"docstatus": 1, "project": project},
+		pluck="name",
+	)
+
+	created = 0
+	for name in vl_names:
+		already_synced = frappe.db.exists(
+			"Project Cost Entry",
+			{"reference_doctype": "Vehicle Log", "reference_name": name, "project": project},
+		)
+		if already_synced:
+			continue
+		create_cost_entries_from_vehicle_log(frappe.get_doc("Vehicle Log", name))
 		created += 1
 	return created
 

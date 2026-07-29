@@ -101,6 +101,14 @@ doc_events = {
 		"on_submit": "escopil_app.project_management.utils.create_cost_entries_from_purchase_order",
 		"on_cancel": "escopil_app.project_management.utils.remove_cost_entries_from_purchase_order",
 	},
+	"Stock Entry": {
+		"on_submit": "escopil_app.project_management.utils.create_cost_entries_from_stock_entry",
+		"on_cancel": "escopil_app.project_management.utils.remove_cost_entries_from_stock_entry",
+	},
+	"Vehicle Log": {
+		"on_submit": "escopil_app.project_management.utils.create_cost_entries_from_vehicle_log",
+		"on_cancel": "escopil_app.project_management.utils.remove_cost_entries_from_vehicle_log",
+	},
 	"Sales Invoice": {
 		"on_submit": "escopil_app.project_management.utils.create_billing_entries_from_sales_invoice",
 		"on_cancel": "escopil_app.project_management.utils.remove_billing_entries_from_sales_invoice",
