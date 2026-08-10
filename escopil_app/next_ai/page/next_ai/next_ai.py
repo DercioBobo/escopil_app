@@ -586,10 +586,60 @@ HANDLERS = {
 
 PROMPT_LABELS = {p["id"]: p["label"] for section in SECTIONS for p in section["prompts"]}
 
+# Per-section live search: typing a name in the input box resolves straight to
+# a detail prompt instead of only matching the fixed suggestion labels. Adding
+# a new section's lookup (Purchasing -> Supplier, Projects -> Project, ...)
+# is just another entry here — no other plumbing needed.
+SEARCH_CONFIG = {
+	"invoicing": {
+		"doctype": "Customer",
+		"search_field": "customer_name",
+		"prompt_id": "invoicing_customer_detail",
+		"param_key": "customer",
+		"result_label": "Ver detalhe de {0}",
+		"extra_filters": {"disabled": 0},
+	},
+}
+
 
 @frappe.whitelist()
 def get_sections():
 	return SECTIONS
+
+
+@frappe.whitelist()
+def search_entities(section_id, query):
+	config = SEARCH_CONFIG.get(section_id)
+	query = (query or "").strip()
+	if not config or len(query) < 2:
+		return []
+
+	frappe.has_permission(config["doctype"], "read", throw=True)
+
+	field = config["search_field"]
+	filters = dict(config.get("extra_filters") or {})
+	filters[field] = ["like", "%{0}%".format(query)]
+
+	rows = frappe.get_list(
+		config["doctype"],
+		filters=filters,
+		fields=["name", field],
+		limit=20,
+	)
+
+	query_lower = query.lower()
+	rows.sort(key=lambda r: (not (r.get(field) or "").lower().startswith(query_lower), (r.get(field) or "").lower()))
+
+	results = []
+	for r in rows[:8]:
+		label_value = r.get(field) or r.name
+		results.append({
+			"id": config["prompt_id"],
+			"label": config["result_label"].format(label_value),
+			"display": label_value,
+			"params": {config["param_key"]: r.name},
+		})
+	return results
 
 
 @frappe.whitelist()

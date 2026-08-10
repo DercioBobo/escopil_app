@@ -25,6 +25,10 @@ class NextAI {
 		this.activeSectionId = 'invoicing';
 		this.trail = [];
 		this.asked = new Set();
+		this.searchTimer = null;
+		this.searchSeq = 0;
+		this.typeaheadItems = [];
+		this.typeaheadIndex = -1;
 		this.setup();
 	}
 
@@ -36,10 +40,13 @@ class NextAI {
 					<div class="na-trail"></div>
 					<div class="na-thread"></div>
 					<div class="na-suggestions"></div>
-					<form class="na-inputbar">
-						<input type="text" class="na-input" placeholder="Escreva a sua pergunta..." autocomplete="off" />
-						<button type="submit" class="na-send" aria-label="Enviar">↑</button>
-					</form>
+					<div class="na-input-area">
+						<div class="na-typeahead"></div>
+						<form class="na-inputbar">
+							<input type="text" class="na-input" placeholder="Escreva a sua pergunta..." autocomplete="off" />
+							<button type="submit" class="na-send" aria-label="Enviar">↑</button>
+						</form>
+					</div>
 				</div>
 			</div>
 		`);
@@ -50,11 +57,16 @@ class NextAI {
 		this.$thread = this.$wrapper.find('.na-thread');
 		this.$suggestions = this.$wrapper.find('.na-suggestions');
 		this.$input = this.$wrapper.find('.na-input');
+		this.$typeahead = this.$wrapper.find('.na-typeahead');
 
 		this.$wrapper.find('.na-inputbar').on('submit', (e) => {
 			e.preventDefault();
 			this.handle_free_text();
 		});
+
+		this.$input.on('input', () => this.on_input_change());
+		this.$input.on('keydown', (e) => this.on_input_keydown(e));
+		this.$input.on('blur', () => setTimeout(() => this.hide_typeahead(), 150));
 
 		this.page.add_inner_button(__('Reiniciar conversa'), () => this.restart());
 
@@ -102,6 +114,9 @@ class NextAI {
 	restart() {
 		this.trail = [];
 		this.asked = new Set();
+		clearTimeout(this.searchTimer);
+		this.hide_typeahead();
+		this.$input.val('');
 		this.$thread.empty();
 		this.render_rail();
 		this.render_welcome();
@@ -167,6 +182,7 @@ class NextAI {
 		const text = (raw || '').trim();
 		if (!text) return;
 		this.$input.val('');
+		this.hide_typeahead();
 
 		const match = this.match_prompt(text);
 		if (match) {
@@ -182,7 +198,7 @@ class NextAI {
 		this.render_suggestions(this.current_section_prompts());
 	}
 
-	match_prompt(text) {
+	norm_text(s) {
 		const ACCENTS = {
 			'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
 			'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
@@ -191,18 +207,126 @@ class NextAI {
 			'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
 			'ç': 'c',
 		};
-		const norm = (s) => (s || '')
+		return (s || '')
 			.toLowerCase()
 			.split('')
 			.map((ch) => ACCENTS[ch] || ch)
 			.join('')
 			.replace(/[^a-z0-9 ]/g, '')
 			.trim();
-		const needle = norm(text);
+	}
+
+	match_prompt(text) {
+		const needle = this.norm_text(text);
 		return this.current_section_prompts().find((p) => {
-			const hay = norm(p.label);
+			const hay = this.norm_text(p.label);
 			return hay === needle || hay.includes(needle) || needle.includes(hay);
 		});
+	}
+
+	match_prompts(text, limit) {
+		const needle = this.norm_text(text);
+		if (!needle) return [];
+		return this.current_section_prompts()
+			.filter((p) => this.norm_text(p.label).includes(needle))
+			.slice(0, limit || 5);
+	}
+
+	// --- typeahead -------------------------------------------------------
+
+	on_input_change() {
+		clearTimeout(this.searchTimer);
+		const text = this.$input.val().trim();
+		if (!text) {
+			this.hide_typeahead();
+			return;
+		}
+		this.searchTimer = setTimeout(() => this.run_typeahead(text), 220);
+	}
+
+	run_typeahead(text) {
+		const seq = ++this.searchSeq;
+		const promptMatches = this.match_prompts(text);
+
+		frappe.call({
+			method: 'escopil_app.next_ai.page.next_ai.next_ai.search_entities',
+			args: { section_id: this.activeSectionId, query: text },
+			callback: (r) => {
+				if (seq !== this.searchSeq) return;
+				this.render_typeahead(promptMatches, r.message || []);
+			},
+			error: () => {
+				if (seq !== this.searchSeq) return;
+				this.render_typeahead(promptMatches, []);
+			},
+		});
+	}
+
+	render_typeahead(promptMatches, entityMatches) {
+		const items = [...promptMatches, ...entityMatches];
+		this.typeaheadItems = items;
+		this.typeaheadIndex = items.length ? 0 : -1;
+
+		if (!items.length) {
+			this.hide_typeahead();
+			return;
+		}
+
+		const item_html = (item, idx) => `
+			<div class="na-typeahead-item" data-idx="${idx}">
+				<span>${frappe.utils.escape_html(item.display || item.label)}</span>
+			</div>
+		`;
+
+		const promptHtml = promptMatches.map((p, idx) => item_html(p, idx)).join('');
+		const entityHtml = entityMatches.length
+			? `<div class="na-typeahead-caption">${frappe.utils.escape_html(__('Clientes'))}</div>`
+				+ entityMatches.map((p, idx) => item_html(p, promptMatches.length + idx)).join('')
+			: '';
+
+		this.$typeahead.html(promptHtml + entityHtml).show();
+		this.highlight_typeahead();
+
+		this.$typeahead.find('.na-typeahead-item').on('click', (e) => {
+			const idx = Number($(e.currentTarget).attr('data-idx'));
+			this.select_typeahead(this.typeaheadItems[idx]);
+		});
+	}
+
+	highlight_typeahead() {
+		this.$typeahead.find('.na-typeahead-item').removeClass('is-active').eq(this.typeaheadIndex).addClass('is-active');
+	}
+
+	select_typeahead(item) {
+		if (!item) return;
+		this.$input.val('');
+		this.hide_typeahead();
+		this.ask_prompt(item.id, item.label, item.params);
+	}
+
+	hide_typeahead() {
+		this.typeaheadItems = [];
+		this.typeaheadIndex = -1;
+		this.$typeahead.empty().hide();
+	}
+
+	on_input_keydown(e) {
+		if (!this.typeaheadItems.length) return;
+
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			this.typeaheadIndex = Math.min(this.typeaheadIndex + 1, this.typeaheadItems.length - 1);
+			this.highlight_typeahead();
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			this.typeaheadIndex = Math.max(this.typeaheadIndex - 1, 0);
+			this.highlight_typeahead();
+		} else if (e.key === 'Escape') {
+			this.hide_typeahead();
+		} else if (e.key === 'Enter' && this.typeaheadIndex >= 0) {
+			e.preventDefault();
+			this.select_typeahead(this.typeaheadItems[this.typeaheadIndex]);
+		}
 	}
 
 	// --- rendering -----------------------------------------------------------
