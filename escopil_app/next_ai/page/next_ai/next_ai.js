@@ -338,6 +338,18 @@ class NextAI {
 			</div>
 		`);
 
+		if (block.link_column) {
+			const { index, doctype, names } = block.link_column;
+			$block.find('tbody tr').each((rowIdx, tr) => {
+				const name = (names || [])[rowIdx];
+				if (!name) return;
+				const $cell = $(tr).find('td').eq(index);
+				const href = this.doc_route(doctype, name);
+				$cell.html(`<a href="${href}" target="_blank" rel="noopener" class="na-doc-link">${frappe.utils.escape_html($cell.text())}</a>`);
+				$cell.find('a').on('click', (e) => e.stopPropagation());
+			});
+		}
+
 		if (block.row_prompt_id) {
 			const rowParams = block.row_params || [];
 			const rowLabels = block.row_labels || [];
@@ -365,6 +377,13 @@ class NextAI {
 		return $block;
 	}
 
+	doc_route(doctype, name) {
+		const slug = (frappe.router && frappe.router.slug)
+			? frappe.router.slug(doctype)
+			: doctype.toLowerCase().replace(/ /g, '-');
+		return `/app/${slug}/${encodeURIComponent(name)}`;
+	}
+
 	render_bar_html(block) {
 		const items = block.items || [];
 		if (!items.length) return '';
@@ -387,36 +406,60 @@ class NextAI {
 	}
 
 	render_trend_html(block) {
-		const points = block.points || [];
-		if (!points.length) return '';
+		const series = (block.series && block.series.length)
+			? block.series
+			: ((block.points && block.points.length) ? [{ label: null, points: block.points }] : []);
+		if (!series.length) return '';
 
-		const values = points.map((p) => Number(p.value) || 0);
-		const min = Math.min(...values, 0);
-		const max = Math.max(...values, 1);
+		const primaryPoints = series[0].points || [];
+		if (!primaryPoints.length) return '';
+
+		const allValues = [];
+		series.forEach((s) => (s.points || []).forEach((p) => allValues.push(Number(p.value) || 0)));
+		const min = Math.min(...allValues, 0);
+		const max = Math.max(...allValues, 1);
 		const range = max - min || 1;
 		const W = 300;
 		const H = 70;
 		const PAD = 6;
-		const step = points.length > 1 ? (W - PAD * 2) / (points.length - 1) : 0;
+		const count = primaryPoints.length;
+		const step = count > 1 ? (W - PAD * 2) / (count - 1) : 0;
 
-		const coords = points.map((p, i) => {
+		const toCoords = (points) => points.map((p, i) => {
 			const x = PAD + step * i;
 			const y = H - PAD - (((Number(p.value) || 0) - min) / range) * (H - PAD * 2);
 			return [x, y];
 		});
-		const path = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-		const dots = coords.map(([x, y]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" class="na-trend-dot"></circle>`).join('');
-		const labels = points.map((p) => `<span>${frappe.utils.escape_html(p.label)}</span>`).join('');
+
+		const paths = series.map((s, idx) => {
+			const coords = toCoords(s.points || []);
+			const d = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+			const cls = idx === 0 ? 'na-trend-line' : 'na-trend-line na-trend-line-alt';
+			const dots = idx === 0
+				? coords.map(([x, y]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" class="na-trend-dot"></circle>`).join('')
+				: '';
+			return `<path d="${d}" class="${cls}" fill="none"></path>${dots}`;
+		}).join('');
+
+		const labels = primaryPoints.map((p) => `<span>${frappe.utils.escape_html(p.label)}</span>`).join('');
 		const title = block.label ? `<div class="na-metric-label">${frappe.utils.escape_html(block.label)}</div>` : '';
+
+		let legend = '';
+		if (series.length > 1) {
+			const items = series.map((s, idx) => `
+				<span class="na-trend-legend-item ${idx === 0 ? '' : 'is-alt'}">${frappe.utils.escape_html(s.label || '')}</span>
+			`).join('');
+			legend = `<div class="na-trend-legend">${items}</div>`;
+		}
 
 		return `
 			<div class="na-trend">
 				${title}
 				<svg viewBox="0 0 ${W} ${H}" class="na-trend-svg" preserveAspectRatio="none">
-					<path d="${path}" class="na-trend-line" fill="none"></path>
-					${dots}
+					${paths}
 				</svg>
 				<div class="na-trend-labels">${labels}</div>
+				${legend}
 			</div>
 		`;
 	}
