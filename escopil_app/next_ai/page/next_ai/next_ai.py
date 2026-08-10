@@ -223,6 +223,27 @@ def h_overdue_invoices(offset=0, **kwargs):
 	today = getdate(nowdate())
 	shown_upto = offset + len(rows)
 
+	table_block = {
+		"type": "table",
+		"columns": ["Fatura", "Cliente", "Valor", "Dias em Atraso"],
+		"rows": [
+			[r.name, r.customer_name or r.customer, _money(r.amount), date_diff(today, r.due_date)]
+			for r in rows
+		],
+		"row_prompt_id": "invoicing_customer_detail",
+		"row_params": [{"customer": r.customer} for r in rows],
+		"row_labels": ["Ver detalhe de {0}".format(r.customer_name or r.customer) for r in rows],
+	}
+
+	if shown_upto < total:
+		remaining = total - shown_upto
+		table_block["load_more"] = {
+			"prompt_id": "invoicing_overdue_invoices",
+			"label": "Mostrar mais {0}".format(min(OVERDUE_PAGE_SIZE, remaining)),
+			"params": {"offset": shown_upto},
+			"remaining": remaining,
+		}
+
 	blocks = [
 		{
 			"type": "text",
@@ -230,29 +251,13 @@ def h_overdue_invoices(offset=0, **kwargs):
 				shown_upto, total
 			),
 		},
-		{
-			"type": "table",
-			"columns": ["Fatura", "Cliente", "Valor", "Dias em Atraso"],
-			"rows": [
-				[r.name, r.customer_name or r.customer, _money(r.amount), date_diff(today, r.due_date)]
-				for r in rows
-			],
-			"row_prompt_id": "invoicing_customer_detail",
-			"row_params": [{"customer": r.customer} for r in rows],
-			"row_labels": ["Ver detalhe de {0}".format(r.customer_name or r.customer) for r in rows],
-		},
+		table_block,
 	]
 
 	follow_ups = [
 		{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"},
 		{"id": "invoicing_total_this_month", "label": "Quanto faturámos este mês?"},
 	]
-	if shown_upto < total:
-		follow_ups.insert(0, {
-			"id": "invoicing_overdue_invoices",
-			"label": "Mostrar mais {0}".format(min(OVERDUE_PAGE_SIZE, total - shown_upto)),
-			"params": {"offset": shown_upto},
-		})
 
 	return {
 		"title": "Faturas vencidas",

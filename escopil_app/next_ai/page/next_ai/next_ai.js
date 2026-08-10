@@ -327,19 +327,21 @@ class NextAI {
 			<tr data-row-idx="${idx}">${row.map((cell) => `<td>${frappe.utils.escape_html(String(cell))}</td>`).join('')}</tr>
 		`).join('');
 
-		const $wrap = $(`
-			<div class="na-table-wrap">
-				<table class="na-table">
-					<thead><tr>${head}</tr></thead>
-					<tbody>${rowsHtml}</tbody>
-				</table>
+		const $block = $(`
+			<div class="na-table-block">
+				<div class="na-table-wrap">
+					<table class="na-table">
+						<thead><tr>${head}</tr></thead>
+						<tbody>${rowsHtml}</tbody>
+					</table>
+				</div>
 			</div>
 		`);
 
 		if (block.row_prompt_id) {
 			const rowParams = block.row_params || [];
 			const rowLabels = block.row_labels || [];
-			$wrap.find('tbody tr')
+			$block.find('tbody tr')
 				.addClass('na-row-clickable')
 				.attr('title', __('Ver detalhe'))
 				.on('click', (e) => {
@@ -348,7 +350,19 @@ class NextAI {
 				});
 		}
 
-		return $wrap;
+		if (block.load_more) {
+			const lm = block.load_more;
+			const $more = $(`
+				<button type="button" class="na-load-more">
+					${frappe.utils.escape_html(lm.label)}
+					<span class="na-load-more-hint">${__('faltam {0}', [lm.remaining])}</span>
+				</button>
+			`);
+			$more.on('click', () => this.ask_prompt(lm.prompt_id, lm.label, lm.params));
+			$block.append($more);
+		}
+
+		return $block;
 	}
 
 	render_bar_html(block) {
