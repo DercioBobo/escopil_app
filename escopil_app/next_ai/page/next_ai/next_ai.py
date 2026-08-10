@@ -14,6 +14,7 @@ from frappe.utils import (
 	getdate,
 	nowdate,
 )
+from escopil_app.project_management.utils import FUEL_RUBRICA
 
 PAGE_SIZE = 20
 
@@ -1005,6 +1006,455 @@ def h_best_month(**kwargs):
 
 
 # ---------------------------------------------------------------------------
+# Handlers — Projetos (Projects)
+# ---------------------------------------------------------------------------
+
+def h_projects_cost_by_project_month(**kwargs):
+	start, end = _month_range(0)
+	rows = frappe.db.sql(
+		"""
+		select pce.project, p.project_name, sum(pce.amount) as total
+		from `tabProject Cost Entry` pce
+		inner join `tabProject` p on p.name = pce.project
+		where pce.posting_date between %(start)s and %(end)s
+		group by pce.project
+		order by total desc
+		limit 10
+		""",
+		{"start": start, "end": end},
+		as_dict=True,
+	)
+
+	if not rows:
+		return {
+			"title": "Custos por projeto em {0}".format(_month_label(start)),
+			"blocks": [{"type": "text", "text": "Não há custos lançados este mês."}],
+			"follow_ups": [{"id": "projects_top_rubricas_month", "label": "Quais as rubricas mais usadas este mês?"}],
+		}
+
+	return {
+		"title": "Custos por projeto em {0}".format(_month_label(start)),
+		"blocks": [
+			{
+				"type": "bar",
+				"items": [
+					{"label": r.project_name or r.project, "value": flt(r.total), "display": _money(r.total)}
+					for r in rows[:5]
+				],
+			},
+			{
+				"type": "table",
+				"columns": ["Projeto", "Custo Total"],
+				"rows": [[r.project_name or r.project, _money(r.total)] for r in rows],
+				"row_prompt_id": "projects_detail",
+				"row_params": [{"project": r.project} for r in rows],
+				"row_labels": ["Ver detalhe de {0}".format(r.project_name or r.project) for r in rows],
+			},
+		],
+		"follow_ups": [
+			{"id": "projects_margin_by_project_month", "label": "Qual a margem de faturação por projeto este mês?"},
+			{"id": "projects_top_rubricas_month", "label": "Quais as rubricas mais usadas este mês?"},
+		],
+	}
+
+
+def h_projects_margin_by_project_month(**kwargs):
+	start, end = _month_range(0)
+
+	cost_rows = frappe.db.sql(
+		"""
+		select project, sum(amount) as total
+		from `tabProject Cost Entry`
+		where posting_date between %(start)s and %(end)s
+		group by project
+		""",
+		{"start": start, "end": end},
+		as_dict=True,
+	)
+	billing_rows = frappe.db.sql(
+		"""
+		select project, sum(billable_amount) as total
+		from `tabProject Billing Entry`
+		where month between %(start)s and %(end)s
+		group by project
+		""",
+		{"start": start, "end": end},
+		as_dict=True,
+	)
+
+	cost_map = {r.project: flt(r.total) for r in cost_rows}
+	billing_map = {r.project: flt(r.total) for r in billing_rows}
+	project_ids = set(cost_map) | set(billing_map)
+
+	if not project_ids:
+		return {
+			"title": "Margem por projeto em {0}".format(_month_label(start)),
+			"blocks": [{"type": "text", "text": "Não há custos ou faturação lançados este mês."}],
+			"follow_ups": [{"id": "projects_cost_by_project_month", "label": "Quanto gastámos por projeto este mês?"}],
+		}
+
+	name_map = {
+		p.name: p.project_name or p.name
+		for p in frappe.get_all("Project", filters={"name": ["in", list(project_ids)]}, fields=["name", "project_name"])
+	}
+
+	rows = []
+	for project in project_ids:
+		billing = billing_map.get(project, 0)
+		cost = cost_map.get(project, 0)
+		rows.append({
+			"project": project,
+			"project_name": name_map.get(project, project),
+			"billing": billing,
+			"cost": cost,
+			"margin": billing - cost,
+		})
+	rows.sort(key=lambda r: r["margin"])
+
+	return {
+		"title": "Margem por projeto em {0}".format(_month_label(start)),
+		"blocks": [{
+			"type": "table",
+			"columns": ["Projeto", "Faturação", "Custo", "Margem"],
+			"rows": [
+				[r["project_name"], _money(r["billing"]), _money(r["cost"]), _money(r["margin"])]
+				for r in rows
+			],
+			"row_prompt_id": "projects_detail",
+			"row_params": [{"project": r["project"]} for r in rows],
+			"row_labels": ["Ver detalhe de {0}".format(r["project_name"]) for r in rows],
+		}],
+		"follow_ups": [
+			{"id": "projects_cost_by_project_month", "label": "Quanto gastámos por projeto este mês?"},
+			{"id": "projects_billing_by_project_year", "label": "Quanto faturámos por projeto este ano?"},
+		],
+	}
+
+
+def h_projects_top_rubricas_month(**kwargs):
+	start, end = _month_range(0)
+	rows = frappe.db.sql(
+		"""
+		select rubrica, sum(amount) as total
+		from `tabProject Cost Entry`
+		where posting_date between %(start)s and %(end)s
+		group by rubrica
+		order by total desc
+		""",
+		{"start": start, "end": end},
+		as_dict=True,
+	)
+
+	if not rows:
+		return {
+			"title": "Rubricas mais usadas em {0}".format(_month_label(start)),
+			"blocks": [{"type": "text", "text": "Não há custos lançados este mês."}],
+			"follow_ups": [{"id": "projects_cost_by_project_month", "label": "Quanto gastámos por projeto este mês?"}],
+		}
+
+	return {
+		"title": "Rubricas mais usadas em {0}".format(_month_label(start)),
+		"blocks": [{
+			"type": "bar",
+			"items": [
+				{"label": r.rubrica, "value": flt(r.total), "display": _money(r.total)}
+				for r in rows
+			],
+		}],
+		"follow_ups": [
+			{"id": "projects_cost_by_project_month", "label": "Quanto gastámos por projeto este mês?"},
+			{"id": "projects_fuel_this_month", "label": "Quanto gastámos em Combustível este mês?"},
+		],
+	}
+
+
+def h_projects_fuel_this_month(**kwargs):
+	start, end = _month_range(0)
+	total = flt(frappe.db.sql(
+		"""
+		select sum(amount)
+		from `tabProject Cost Entry`
+		where posting_date between %(start)s and %(end)s and rubrica = %(rubrica)s
+		""",
+		{"start": start, "end": end, "rubrica": FUEL_RUBRICA},
+	)[0][0])
+
+	return {
+		"title": "Combustível em {0}".format(_month_label(start)),
+		"blocks": [
+			{"type": "metric", "label": "Total em Combustível", "value": _money(total)},
+		],
+		"follow_ups": [
+			{"id": "projects_top_rubricas_month", "label": "Quais as rubricas mais usadas este mês?"},
+			{"id": "projects_cost_by_project_month", "label": "Quanto gastámos por projeto este mês?"},
+		],
+	}
+
+
+def h_projects_over_budget(**kwargs):
+	start, end = _month_range(0)
+
+	projects = frappe.get_all(
+		"Project",
+		filters={"custom_cost_control_enabled": 1},
+		fields=["name", "project_name"],
+	)
+	if not projects:
+		return {
+			"title": "Projetos a exceder o orçamento",
+			"blocks": [{"type": "text", "text": "Não há projetos com Controlo de Custos ativado."}],
+			"follow_ups": [{"id": "projects_cost_by_project_month", "label": "Quanto gastámos por projeto este mês?"}],
+		}
+
+	project_names = [p.name for p in projects]
+
+	forecast_rows = frappe.db.sql(
+		"""
+		select parent as project, sum(monthly_forecast) as total
+		from `tabProject Budget Rubrica`
+		where parent in %(projects)s
+		group by parent
+		""",
+		{"projects": project_names},
+		as_dict=True,
+	)
+	forecast_map = {r.project: flt(r.total) for r in forecast_rows}
+
+	cost_rows = frappe.db.sql(
+		"""
+		select project, sum(amount) as total
+		from `tabProject Cost Entry`
+		where project in %(projects)s and posting_date between %(start)s and %(end)s
+		group by project
+		""",
+		{"projects": project_names, "start": start, "end": end},
+		as_dict=True,
+	)
+	cost_map = {r.project: flt(r.total) for r in cost_rows}
+
+	over = []
+	for p in projects:
+		forecast = forecast_map.get(p.name, 0)
+		actual = cost_map.get(p.name, 0)
+		if forecast and actual > forecast:
+			over.append({
+				"project": p.name,
+				"project_name": p.project_name or p.name,
+				"forecast": forecast,
+				"actual": actual,
+				"over_pct": (actual - forecast) / forecast * 100,
+			})
+
+	if not over:
+		return {
+			"title": "Projetos a exceder o orçamento em {0}".format(_month_label(start)),
+			"blocks": [{"type": "text", "text": "Nenhum projeto excedeu o orçamento mensal previsto este mês."}],
+			"follow_ups": [{"id": "projects_cost_by_project_month", "label": "Quanto gastámos por projeto este mês?"}],
+		}
+
+	over.sort(key=lambda r: r["over_pct"], reverse=True)
+
+	return {
+		"title": "Projetos a exceder o orçamento em {0}".format(_month_label(start)),
+		"blocks": [{
+			"type": "table",
+			"columns": ["Projeto", "Orçamento Mensal", "Gasto Real", "Desvio"],
+			"rows": [
+				[r["project_name"], _money(r["forecast"]), _money(r["actual"]), "+{0:.0f}%".format(r["over_pct"])]
+				for r in over
+			],
+			"row_prompt_id": "projects_detail",
+			"row_params": [{"project": r["project"]} for r in over],
+			"row_labels": ["Ver detalhe de {0}".format(r["project_name"]) for r in over],
+		}],
+		"follow_ups": [
+			{"id": "projects_cost_by_project_month", "label": "Quanto gastámos por projeto este mês?"},
+			{"id": "projects_margin_by_project_month", "label": "Qual a margem de faturação por projeto este mês?"},
+		],
+	}
+
+
+def h_projects_billing_by_project_year(**kwargs):
+	year = getdate(nowdate()).year
+	start = getdate("{0}-01-01".format(year))
+	end = getdate(nowdate())
+
+	rows = frappe.db.sql(
+		"""
+		select pbe.project, p.project_name, sum(pbe.billable_amount) as total
+		from `tabProject Billing Entry` pbe
+		inner join `tabProject` p on p.name = pbe.project
+		where pbe.month between %(start)s and %(end)s
+		group by pbe.project
+		order by total desc
+		limit 10
+		""",
+		{"start": start, "end": end},
+		as_dict=True,
+	)
+
+	if not rows:
+		return {
+			"title": "Faturação por projeto em {0}".format(year),
+			"blocks": [{"type": "text", "text": "Não há faturação por projeto lançada este ano."}],
+			"follow_ups": [{"id": "projects_cost_by_project_month", "label": "Quanto gastámos por projeto este mês?"}],
+		}
+
+	return {
+		"title": "Faturação por projeto em {0}".format(year),
+		"blocks": [
+			{
+				"type": "bar",
+				"items": [
+					{"label": r.project_name or r.project, "value": flt(r.total), "display": _money(r.total)}
+					for r in rows[:5]
+				],
+			},
+			{
+				"type": "table",
+				"columns": ["Projeto", "Faturação"],
+				"rows": [[r.project_name or r.project, _money(r.total)] for r in rows],
+				"row_prompt_id": "projects_detail",
+				"row_params": [{"project": r.project} for r in rows],
+				"row_labels": ["Ver detalhe de {0}".format(r.project_name or r.project) for r in rows],
+			},
+		],
+		"follow_ups": [
+			{"id": "projects_margin_by_project_month", "label": "Qual a margem de faturação por projeto este mês?"},
+		],
+	}
+
+
+def h_projects_detail(project=None, **kwargs):
+	if not project:
+		frappe.throw(_("Projeto não especificado."))
+
+	project_name = frappe.db.get_value("Project", project, "project_name") or project
+
+	cost_total = flt(frappe.db.sql(
+		"""select sum(amount) from `tabProject Cost Entry` where project = %(project)s""",
+		{"project": project},
+	)[0][0])
+
+	billing_total = flt(frappe.db.sql(
+		"""select sum(billable_amount) from `tabProject Billing Entry` where project = %(project)s""",
+		{"project": project},
+	)[0][0])
+
+	rubrica_rows = frappe.db.sql(
+		"""
+		select rubrica, sum(amount) as total
+		from `tabProject Cost Entry`
+		where project = %(project)s
+		group by rubrica
+		order by total desc
+		limit 5
+		""",
+		{"project": project},
+		as_dict=True,
+	)
+
+	blocks = [
+		{
+			"type": "kpi_grid",
+			"items": [
+				{"label": "Custo Total", "value": _money(cost_total)},
+				{"label": "Faturação Total", "value": _money(billing_total)},
+				{"label": "Margem", "value": _money(billing_total - cost_total)},
+			],
+		},
+	]
+
+	if rubrica_rows:
+		blocks.append({
+			"type": "bar",
+			"items": [
+				{"label": r.rubrica, "value": flt(r.total), "display": _money(r.total)}
+				for r in rubrica_rows
+			],
+		})
+	else:
+		blocks.append({"type": "text", "text": "Ainda não há custos lançados para este projeto."})
+
+	return {
+		"title": "Visão geral de {0}".format(project_name),
+		"blocks": blocks,
+		"follow_ups": [
+			{
+				"id": "projects_trend_comparison",
+				"label": "Comparar com o mês passado",
+				"params": {"project": project},
+			},
+		],
+	}
+
+
+def h_projects_trend_comparison(project=None, **kwargs):
+	if not project:
+		frappe.throw(_("Projeto não especificado."))
+
+	project_name = frappe.db.get_value("Project", project, "project_name") or project
+
+	months = [_month_range(offset) for offset in range(-5, 1)]
+	cost_totals = []
+	billing_totals = []
+	for start, end in months:
+		cost_totals.append(flt(frappe.db.sql(
+			"""
+			select sum(amount) from `tabProject Cost Entry`
+			where project = %(project)s and posting_date between %(start)s and %(end)s
+			""",
+			{"project": project, "start": start, "end": end},
+		)[0][0]))
+		billing_totals.append(flt(frappe.db.sql(
+			"""
+			select sum(billable_amount) from `tabProject Billing Entry`
+			where project = %(project)s and month between %(start)s and %(end)s
+			""",
+			{"project": project, "start": start, "end": end},
+		)[0][0]))
+
+	cur_margin = billing_totals[-1] - cost_totals[-1]
+	prev_margin = billing_totals[-2] - cost_totals[-2]
+	delta_pct = ((cur_margin - prev_margin) / abs(prev_margin) * 100) if prev_margin else None
+
+	return {
+		"title": "{0}: tendência mensal".format(project_name),
+		"blocks": [
+			{
+				"type": "trend",
+				"label": "Custo vs Faturação (últimos 6 meses)",
+				"series": [
+					{
+						"label": "Faturação",
+						"points": [
+							{"label": _month_label_short(start), "value": value}
+							for (start, _end), value in zip(months, billing_totals)
+						],
+					},
+					{
+						"label": "Custo",
+						"points": [
+							{"label": _month_label_short(start), "value": value}
+							for (start, _end), value in zip(months, cost_totals)
+						],
+					},
+				],
+			},
+			{
+				"type": "comparison",
+				"items": [
+					{"label": "{0} (margem)".format(_month_label(months[-2][0])), "value": _money(prev_margin)},
+					{"label": "{0} (margem)".format(_month_label(months[-1][0])), "value": _money(cur_margin)},
+				],
+				"delta_pct": delta_pct,
+			},
+		],
+		"follow_ups": [],
+	}
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
@@ -1026,6 +1476,18 @@ SECTIONS = [
 			{"id": "invoicing_top_customers_year", "label": "Quais são os maiores clientes este ano?"},
 			{"id": "invoicing_top_customers_alltime", "label": "Quais são os maiores clientes de sempre?"},
 			{"id": "invoicing_top_invoices_month", "label": "Quais as maiores faturas emitidas este mês?"},
+		],
+	},
+	{
+		"id": "projects",
+		"label": "Projetos",
+		"prompts": [
+			{"id": "projects_cost_by_project_month", "label": "Quanto gastámos por projeto este mês?"},
+			{"id": "projects_margin_by_project_month", "label": "Qual a margem de faturação por projeto este mês?"},
+			{"id": "projects_top_rubricas_month", "label": "Quais as rubricas mais usadas este mês?"},
+			{"id": "projects_fuel_this_month", "label": "Quanto gastámos em Combustível este mês?"},
+			{"id": "projects_over_budget", "label": "Que projetos estão a exceder o orçamento?"},
+			{"id": "projects_billing_by_project_year", "label": "Quanto faturámos por projeto este ano?"},
 		],
 	},
 ]
@@ -1050,6 +1512,14 @@ HANDLERS = {
 	"invoicing_unpaid_invoices": (h_unpaid_invoices, "Sales Invoice"),
 	"invoicing_partially_paid": (h_partially_paid, "Sales Invoice"),
 	"invoicing_best_month": (h_best_month, "Sales Invoice"),
+	"projects_cost_by_project_month": (h_projects_cost_by_project_month, "Project"),
+	"projects_margin_by_project_month": (h_projects_margin_by_project_month, "Project"),
+	"projects_top_rubricas_month": (h_projects_top_rubricas_month, "Project"),
+	"projects_fuel_this_month": (h_projects_fuel_this_month, "Project"),
+	"projects_over_budget": (h_projects_over_budget, "Project"),
+	"projects_billing_by_project_year": (h_projects_billing_by_project_year, "Project"),
+	"projects_detail": (h_projects_detail, "Project"),
+	"projects_trend_comparison": (h_projects_trend_comparison, "Project"),
 }
 
 PROMPT_LABELS = {p["id"]: p["label"] for section in SECTIONS for p in section["prompts"]}
@@ -1067,6 +1537,13 @@ SEARCH_CONFIG = {
 		"result_label": "Ver detalhe de {0}",
 		"extra_filters": {"disabled": 0},
 	},
+	"projects": {
+		"doctype": "Project",
+		"search_field": "project_name",
+		"prompt_id": "projects_detail",
+		"param_key": "project",
+		"result_label": "Ver detalhe de {0}",
+	},
 }
 
 # When a call includes one of these params, the answer is "about" that entity —
@@ -1075,6 +1552,7 @@ SEARCH_CONFIG = {
 # a new entity (supplier, project, ...) is just another entry here.
 CONTEXT_PARAM_KEYS = {
 	"customer": ("Customer", "customer_name"),
+	"project": ("Project", "project_name"),
 }
 
 

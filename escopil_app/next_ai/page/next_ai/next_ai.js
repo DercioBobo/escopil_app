@@ -14,9 +14,16 @@ const SECTION_META = {
 	invoicing: { label: 'Faturação', ready: true },
 	purchasing: { label: 'Compras', ready: false },
 	stock: { label: 'Stock', ready: false },
-	projects: { label: 'Projetos', ready: false },
+	projects: { label: 'Projetos', ready: true },
 };
 const SECTION_ORDER = ['invoicing', 'purchasing', 'stock', 'projects'];
+
+// Caption shown above the live entity-search results in the typeahead
+// dropdown, per section (see SEARCH_CONFIG server-side).
+const SECTION_ENTITY_LABEL = {
+	invoicing: 'Clientes',
+	projects: 'Projetos',
+};
 
 // When the assistant is "focused" on a specific entity (a customer, later a
 // supplier/project/...), these are the base prompts offered instead of the
@@ -27,6 +34,10 @@ const CONTEXT_PROMPTS = {
 		{ id: 'invoicing_customer_detail', label: 'Ver visão geral do cliente', params: { customer: id } },
 		{ id: 'invoicing_customer_trend_comparison', label: 'Comparar com o mês passado', params: { customer: id } },
 		{ id: 'invoicing_customer_all_invoices', label: 'Ver todo o histórico de faturas', params: { customer: id } },
+	],
+	project: (id) => [
+		{ id: 'projects_detail', label: 'Ver visão geral do projeto', params: { project: id } },
+		{ id: 'projects_trend_comparison', label: 'Comparar com o mês passado', params: { project: id } },
 	],
 };
 
@@ -320,9 +331,10 @@ class NextAI {
 			</div>
 		`;
 
+		const entityLabel = SECTION_ENTITY_LABEL[this.activeSectionId] || __('Resultados');
 		const promptHtml = promptMatches.map((p, idx) => item_html(p, idx)).join('');
 		const entityHtml = entityMatches.length
-			? `<div class="na-typeahead-caption">${frappe.utils.escape_html(__('Clientes'))}</div>`
+			? `<div class="na-typeahead-caption">${frappe.utils.escape_html(entityLabel)}</div>`
 				+ entityMatches.map((p, idx) => item_html(p, promptMatches.length + idx)).join('')
 			: '';
 
