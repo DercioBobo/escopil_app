@@ -1,0 +1,299 @@
+frappe.pages['next-ai'].on_page_load = function (wrapper) {
+	var page = frappe.ui.make_app_page({
+		parent: wrapper,
+		title: 'Next AI',
+		single_column: true,
+	});
+
+	frappe.require('/assets/escopil_app/css/next_ai.css', () => {
+		frappe.next_ai = new NextAI(page);
+	});
+};
+
+const SECTION_META = {
+	invoicing: { label: 'Faturação', ready: true },
+	purchasing: { label: 'Compras', ready: false },
+	stock: { label: 'Stock', ready: false },
+	projects: { label: 'Projetos', ready: false },
+};
+const SECTION_ORDER = ['invoicing', 'purchasing', 'stock', 'projects'];
+
+class NextAI {
+	constructor(page) {
+		this.page = page;
+		this.sections = [];
+		this.activeSectionId = 'invoicing';
+		this.trail = [];
+		this.setup();
+	}
+
+	setup() {
+		$(this.page.body).html(`
+			<div class="next-ai">
+				<div class="na-rail"></div>
+				<div class="na-main">
+					<div class="na-trail"></div>
+					<div class="na-thread"></div>
+					<div class="na-suggestions"></div>
+					<form class="na-inputbar">
+						<input type="text" class="na-input" placeholder="Escreva a sua pergunta..." autocomplete="off" />
+						<button type="submit" class="na-send" aria-label="Enviar">↑</button>
+					</form>
+				</div>
+			</div>
+		`);
+
+		this.$wrapper = $(this.page.body).find('.next-ai');
+		this.$rail = this.$wrapper.find('.na-rail');
+		this.$trail = this.$wrapper.find('.na-trail');
+		this.$thread = this.$wrapper.find('.na-thread');
+		this.$suggestions = this.$wrapper.find('.na-suggestions');
+		this.$input = this.$wrapper.find('.na-input');
+
+		this.$wrapper.find('.na-inputbar').on('submit', (e) => {
+			e.preventDefault();
+			this.handle_free_text();
+		});
+
+		frappe.call('escopil_app.next_ai.page.next_ai.next_ai.get_sections').then((r) => {
+			this.sections = r.message || [];
+			this.render_rail();
+			this.render_welcome();
+			this.render_suggestions(this.current_section_prompts());
+		});
+	}
+
+	current_section_prompts() {
+		const section = this.sections.find((s) => s.id === this.activeSectionId);
+		return section ? section.prompts : [];
+	}
+
+	render_rail() {
+		this.$rail.empty();
+		this.$rail.append(`<div class="na-brand">Next AI</div>`);
+
+		SECTION_ORDER.forEach((id) => {
+			const meta = SECTION_META[id];
+			const active = id === this.activeSectionId ? 'is-active' : '';
+			const disabled = meta.ready ? '' : 'is-disabled';
+			const badge = meta.ready ? '' : '<span class="na-soon">Em breve</span>';
+			const $btn = $(`
+				<button type="button" class="na-section ${active} ${disabled}">
+					<span>${frappe.utils.escape_html(meta.label)}</span>
+					${badge}
+				</button>
+			`);
+			if (meta.ready) {
+				$btn.on('click', () => this.switch_section(id));
+			}
+			this.$rail.append($btn);
+		});
+	}
+
+	switch_section(id) {
+		if (id === this.activeSectionId) return;
+		this.activeSectionId = id;
+		this.trail = [];
+		this.$thread.empty();
+		this.render_rail();
+		this.render_welcome();
+		this.render_suggestions(this.current_section_prompts());
+	}
+
+	render_welcome() {
+		const label = SECTION_META[this.activeSectionId].label;
+		this.$thread.empty();
+		this.$trail.empty();
+		this.append_bot_html(`
+			<p>Olá! Sou o assistente <strong>Next AI</strong>.</p>
+			<p>Escolha uma pergunta sobre <strong>${frappe.utils.escape_html(label)}</strong> para começar.</p>
+		`);
+	}
+
+	render_trail() {
+		if (!this.trail.length) {
+			this.$trail.empty();
+			return;
+		}
+		const crumbs = this.trail.map((t, idx) => {
+			const isLast = idx === this.trail.length - 1;
+			return `<span class="na-crumb ${isLast ? 'is-last' : ''}" data-idx="${idx}">${frappe.utils.escape_html(t)}</span>`;
+		});
+		this.$trail.html(crumbs.join('<span class="na-crumb-sep">›</span>'));
+	}
+
+	// --- asking flow -------------------------------------------------------
+
+	ask_prompt(prompt_id, label, params) {
+		this.append_user_bubble(label);
+		this.trail.push(label);
+		this.render_trail();
+		this.render_suggestions([]);
+
+		const $typing = this.append_typing_indicator();
+
+		frappe.call({
+			method: 'escopil_app.next_ai.page.next_ai.next_ai.ask',
+			args: { prompt_id, params: params || {} },
+			callback: (r) => {
+				$typing.remove();
+				const result = r.message || {};
+				this.append_bot_result(result);
+				this.render_suggestions(result.follow_ups || []);
+			},
+			error: () => {
+				$typing.remove();
+				this.append_bot_html(`<p>Não consegui obter essa resposta agora. Tente novamente.</p>`);
+				this.render_suggestions(this.current_section_prompts());
+			},
+		});
+	}
+
+	handle_free_text() {
+		const raw = this.$input.val();
+		const text = (raw || '').trim();
+		if (!text) return;
+		this.$input.val('');
+
+		const match = this.match_prompt(text);
+		if (match) {
+			this.ask_prompt(match.id, match.label);
+			return;
+		}
+
+		this.append_user_bubble(text);
+		this.append_bot_html(`
+			<p>Ainda não tenho uma resposta pronta para essa pergunta.</p>
+			<p>Escolha uma das sugestões abaixo:</p>
+		`);
+		this.render_suggestions(this.current_section_prompts());
+	}
+
+	match_prompt(text) {
+		const ACCENTS = {
+			'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
+			'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+			'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+			'ó': 'o', 'ò': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
+			'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+			'ç': 'c',
+		};
+		const norm = (s) => (s || '')
+			.toLowerCase()
+			.split('')
+			.map((ch) => ACCENTS[ch] || ch)
+			.join('')
+			.replace(/[^a-z0-9 ]/g, '')
+			.trim();
+		const needle = norm(text);
+		return this.current_section_prompts().find((p) => {
+			const hay = norm(p.label);
+			return hay === needle || hay.includes(needle) || needle.includes(hay);
+		});
+	}
+
+	// --- rendering -----------------------------------------------------------
+
+	append_user_bubble(label) {
+		const $row = $(`
+			<div class="na-row na-row-user">
+				<div class="na-bubble na-bubble-user">${frappe.utils.escape_html(label)}</div>
+			</div>
+		`);
+		this.$thread.append($row);
+		this.scroll_to_bottom();
+	}
+
+	append_typing_indicator() {
+		const $row = $(`
+			<div class="na-row na-row-bot">
+				<div class="na-avatar">N</div>
+				<div class="na-bubble na-bubble-bot na-typing">
+					<span></span><span></span><span></span>
+				</div>
+			</div>
+		`);
+		this.$thread.append($row);
+		this.scroll_to_bottom();
+		return $row;
+	}
+
+	append_bot_html(html) {
+		const $row = $(`
+			<div class="na-row na-row-bot">
+				<div class="na-avatar">N</div>
+				<div class="na-bubble na-bubble-bot">${html}</div>
+			</div>
+		`);
+		this.$thread.append($row);
+		this.scroll_to_bottom();
+		return $row;
+	}
+
+	append_bot_result(result) {
+		const blocks = (result.blocks || []).map((b) => this.render_block(b)).join('');
+		const title = result.title ? `<div class="na-answer-title">${frappe.utils.escape_html(result.title)}</div>` : '';
+		return this.append_bot_html(`${title}${blocks}`);
+	}
+
+	render_block(block) {
+		if (block.type === 'metric') {
+			return `
+				<div class="na-metric">
+					<div class="na-metric-label">${frappe.utils.escape_html(block.label)}</div>
+					<div class="na-metric-value">${frappe.utils.escape_html(block.value)}</div>
+				</div>
+			`;
+		}
+		if (block.type === 'comparison') {
+			const items = (block.items || []).map((it) => `
+				<div class="na-compare-item">
+					<div class="na-metric-label">${frappe.utils.escape_html(it.label)}</div>
+					<div class="na-metric-value na-metric-value-sm">${frappe.utils.escape_html(it.value)}</div>
+				</div>
+			`).join('<div class="na-compare-arrow">→</div>');
+
+			let delta = '';
+			if (block.delta_pct !== null && block.delta_pct !== undefined) {
+				const up = block.delta_pct >= 0;
+				delta = `
+					<div class="na-delta ${up ? 'is-up' : 'is-down'}">
+						${up ? '▲' : '▼'} ${Math.abs(block.delta_pct).toFixed(1)}%
+					</div>
+				`;
+			}
+			return `<div class="na-compare">${items}</div>${delta}`;
+		}
+		if (block.type === 'table') {
+			const head = (block.columns || []).map((c) => `<th>${frappe.utils.escape_html(c)}</th>`).join('');
+			const rows = (block.rows || []).map((row) => `
+				<tr>${row.map((cell) => `<td>${frappe.utils.escape_html(String(cell))}</td>`).join('')}</tr>
+			`).join('');
+			return `
+				<div class="na-table-wrap">
+					<table class="na-table">
+						<thead><tr>${head}</tr></thead>
+						<tbody>${rows}</tbody>
+					</table>
+				</div>
+			`;
+		}
+		if (block.type === 'text') {
+			return `<p class="na-text">${frappe.utils.escape_html(block.text)}</p>`;
+		}
+		return '';
+	}
+
+	render_suggestions(prompts) {
+		this.$suggestions.empty();
+		(prompts || []).forEach((p) => {
+			const $pill = $(`<button type="button" class="na-pill">${frappe.utils.escape_html(p.label)}</button>`);
+			$pill.on('click', () => this.ask_prompt(p.id, p.label, p.params));
+			this.$suggestions.append($pill);
+		});
+	}
+
+	scroll_to_bottom() {
+		this.$thread.animate({ scrollTop: this.$thread.prop('scrollHeight') }, 150);
+	}
+}

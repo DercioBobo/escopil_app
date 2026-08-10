@@ -10,5 +10,12 @@ def get_data():
 			"icon": "octicon octicon-checklist",
 			"type": "module",
 			"label": _("Project Management")
+		},
+		{
+			"module_name": "Next AI",
+			"color": "orange",
+			"icon": "octicon octicon-comment-discussion",
+			"type": "module",
+			"label": _("Next AI")
 		}
 	]
