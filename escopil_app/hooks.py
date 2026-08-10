@@ -38,6 +38,7 @@ doctype_js = {
 	"Material Request": "public/js/rubrica_cascade.js",
 	"Purchase Order": "public/js/rubrica_cascade.js",
 	"Purchase Invoice": "public/js/rubrica_cascade.js",
+	"Stock Entry": "public/js/stock_entry_rubrica.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}

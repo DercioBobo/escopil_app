@@ -4,7 +4,6 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
-MATERIAL_ISSUE_RUBRICA = "Consumiveis"
 FUEL_RUBRICA = "Combustivel"
 
 
@@ -100,13 +99,15 @@ def remove_cost_entries_from_purchase_order(doc, method=None):
 def create_cost_entries_from_stock_entry(doc, method=None):
 	if doc.stock_entry_type != "Material Issue" or not doc.project:
 		return
+	if not doc.get("custom_rubrica"):
+		return
 	if not flt(doc.total_outgoing_value):
 		return
 
 	_sync(lambda: frappe.get_doc({
 		"doctype": "Project Cost Entry",
 		"project": doc.project,
-		"rubrica": MATERIAL_ISSUE_RUBRICA,
+		"rubrica": doc.custom_rubrica,
 		"posting_date": doc.posting_date,
 		"amount": doc.total_outgoing_value,
 		"source_type": "Stock Entry (Material Issue)",

@@ -97,4 +97,15 @@ custom_fields = {
 			insert_after="project",
 		),
 	],
+	"Stock Entry": [
+		dict(
+			fieldname="custom_rubrica",
+			label="Rubrica",
+			fieldtype="Link",
+			options="Project Rubrica",
+			insert_after="project",
+			mandatory_depends_on="eval:doc.stock_entry_type=='Material Issue'",
+			description="Obrigatório para Saídas de Material (Consumíveis ou Material de Safety).",
+		),
+	],
 }
