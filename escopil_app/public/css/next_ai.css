@@ -116,6 +116,51 @@
 	color: var(--na-line);
 }
 
+.na-context-banner {
+	display: none;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	margin: 8px 24px 0;
+	padding: 7px 14px;
+	background: var(--na-accent-soft);
+	border: 1px solid var(--na-accent);
+	border-radius: 10px;
+	font-size: 12.5px;
+}
+
+.na-context-banner.is-visible {
+	display: flex;
+}
+
+.na-context-label {
+	color: var(--na-ink);
+	font-weight: 600;
+}
+
+.na-context-label::before {
+	content: '●';
+	color: var(--na-accent);
+	margin-right: 6px;
+	font-size: 9px;
+	vertical-align: middle;
+}
+
+.na-context-exit {
+	border: none;
+	background: transparent;
+	color: var(--na-accent);
+	font-weight: 600;
+	font-size: 12px;
+	cursor: pointer;
+	padding: 2px 6px;
+}
+
+.na-context-exit:hover {
+	text-decoration: underline;
+}
+
 .na-thread {
 	flex: 1;
 	overflow-y: auto;

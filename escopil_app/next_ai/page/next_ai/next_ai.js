@@ -18,6 +18,18 @@ const SECTION_META = {
 };
 const SECTION_ORDER = ['invoicing', 'purchasing', 'stock', 'projects'];
 
+// When the assistant is "focused" on a specific entity (a customer, later a
+// supplier/project/...), these are the base prompts offered instead of the
+// section's general starter pills, until the user exits or picks a different
+// entity. Keyed by context.type (see CONTEXT_PARAM_KEYS server-side).
+const CONTEXT_PROMPTS = {
+	customer: (id) => [
+		{ id: 'invoicing_customer_detail', label: 'Ver visão geral do cliente', params: { customer: id } },
+		{ id: 'invoicing_customer_trend_comparison', label: 'Comparar com o mês passado', params: { customer: id } },
+		{ id: 'invoicing_customer_all_invoices', label: 'Ver todo o histórico de faturas', params: { customer: id } },
+	],
+};
+
 class NextAI {
 	constructor(page) {
 		this.page = page;
@@ -25,6 +37,7 @@ class NextAI {
 		this.activeSectionId = 'invoicing';
 		this.trail = [];
 		this.asked = new Set();
+		this.context = null;
 		this.searchTimer = null;
 		this.searchSeq = 0;
 		this.typeaheadItems = [];
@@ -38,6 +51,7 @@ class NextAI {
 				<div class="na-rail"></div>
 				<div class="na-main">
 					<div class="na-trail"></div>
+					<div class="na-context-banner"></div>
 					<div class="na-thread"></div>
 					<div class="na-suggestions"></div>
 					<div class="na-input-area">
@@ -54,6 +68,7 @@ class NextAI {
 		this.$wrapper = $(this.page.body).find('.next-ai');
 		this.$rail = this.$wrapper.find('.na-rail');
 		this.$trail = this.$wrapper.find('.na-trail');
+		this.$contextBanner = this.$wrapper.find('.na-context-banner');
 		this.$thread = this.$wrapper.find('.na-thread');
 		this.$suggestions = this.$wrapper.find('.na-suggestions');
 		this.$input = this.$wrapper.find('.na-input');
@@ -79,8 +94,29 @@ class NextAI {
 	}
 
 	current_section_prompts() {
+		if (this.context && CONTEXT_PROMPTS[this.context.type]) {
+			return CONTEXT_PROMPTS[this.context.type](this.context.id);
+		}
 		const section = this.sections.find((s) => s.id === this.activeSectionId);
 		return section ? section.prompts : [];
+	}
+
+	render_context_banner() {
+		if (!this.context) {
+			this.$contextBanner.removeClass('is-visible').empty();
+			return;
+		}
+		this.$contextBanner.html(`
+			<span class="na-context-label">${frappe.utils.escape_html(this.context.label)}</span>
+			<button type="button" class="na-context-exit">${frappe.utils.escape_html(__('Sair'))}</button>
+		`).addClass('is-visible');
+		this.$contextBanner.find('.na-context-exit').on('click', () => this.exit_context());
+	}
+
+	exit_context() {
+		this.context = null;
+		this.render_context_banner();
+		this.render_suggestions(this.current_section_prompts());
 	}
 
 	render_rail() {
@@ -114,6 +150,8 @@ class NextAI {
 	restart() {
 		this.trail = [];
 		this.asked = new Set();
+		this.context = null;
+		this.render_context_banner();
 		clearTimeout(this.searchTimer);
 		this.hide_typeahead();
 		this.$input.val('');
@@ -167,6 +205,10 @@ class NextAI {
 				$typing.remove();
 				const result = r.message || {};
 				this.append_bot_result(result);
+				if (result.context) {
+					this.context = result.context;
+					this.render_context_banner();
+				}
 				this.render_suggestions(result.follow_ups || []);
 			},
 			error: () => {

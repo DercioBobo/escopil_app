@@ -16,6 +16,7 @@ from frappe.utils import (
 )
 
 OVERDUE_PAGE_SIZE = 20
+CUSTOMER_INVOICES_PAGE_SIZE = 20
 
 MONTHS_PT = [
 	"Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -278,46 +279,202 @@ def h_customer_detail(customer=None, **kwargs):
 
 	customer_name = frappe.db.get_value("Customer", customer, "customer_name") or customer
 
+	summary = frappe.db.sql(
+		"""
+		select
+			sum(grand_total) as total,
+			sum(outstanding_amount) as outstanding,
+			sum(case when due_date < %(today)s then outstanding_amount else 0 end) as overdue,
+			count(*) as invoice_count
+		from `tabSales Invoice`
+		where docstatus = 1 and customer = %(customer)s
+		""",
+		{"customer": customer, "today": nowdate()},
+		as_dict=True,
+	)[0]
+
+	blocks = [
+		{
+			"type": "kpi_grid",
+			"items": [
+				{"label": "Total Faturado", "value": _money(summary.total)},
+				{"label": "Em Aberto", "value": _money(summary.outstanding)},
+				{"label": "Vencido", "value": _money(summary.overdue)},
+				{"label": "Nº Faturas", "value": str(cint(summary.invoice_count))},
+			],
+		},
+	]
+
+	if cint(summary.invoice_count):
+		open_rows = frappe.db.sql(
+			"""
+			select name, posting_date, grand_total, outstanding_amount, due_date
+			from `tabSales Invoice`
+			where docstatus = 1 and customer = %(customer)s and outstanding_amount > 0
+			order by due_date asc
+			""",
+			{"customer": customer},
+			as_dict=True,
+		)
+
+		if open_rows:
+			today = getdate(nowdate())
+			blocks.append({
+				"type": "table",
+				"columns": ["Fatura", "Data", "Valor", "Vencimento", "Estado"],
+				"rows": [
+					[
+						r.name,
+						formatdate(r.posting_date, "dd/MM/yyyy"),
+						_money(r.grand_total),
+						formatdate(r.due_date, "dd/MM/yyyy"),
+						"Vencida" if getdate(r.due_date) < today else "Em dia",
+					]
+					for r in open_rows
+				],
+				"link_column": {"index": 0, "doctype": "Sales Invoice", "names": [r.name for r in open_rows]},
+			})
+		else:
+			blocks.append({"type": "text", "text": "Sem faturas em aberto."})
+	else:
+		blocks.append({"type": "text", "text": "{0} ainda não tem faturas submetidas.".format(customer_name)})
+
+	return {
+		"title": "Visão geral de {0}".format(customer_name),
+		"blocks": blocks,
+		"follow_ups": [
+			{
+				"id": "invoicing_customer_trend_comparison",
+				"label": "Comparar com o mês passado",
+				"params": {"customer": customer},
+			},
+			{
+				"id": "invoicing_customer_all_invoices",
+				"label": "Ver todo o histórico de faturas",
+				"params": {"customer": customer},
+			},
+		],
+	}
+
+
+def h_customer_trend_comparison(customer=None, **kwargs):
+	if not customer:
+		frappe.throw(_("Cliente não especificado."))
+
+	customer_name = frappe.db.get_value("Customer", customer, "customer_name") or customer
+
+	months = [_month_range(offset) for offset in range(-5, 1)]
+	totals = []
+	for start, end in months:
+		totals.append(flt(frappe.db.sql(
+			"""
+			select sum(grand_total)
+			from `tabSales Invoice`
+			where docstatus = 1 and customer = %(customer)s and posting_date between %(start)s and %(end)s
+			""",
+			{"customer": customer, "start": start, "end": end},
+		)[0][0]))
+
+	cur_total = totals[-1]
+	prev_total = totals[-2]
+	delta_pct = ((cur_total - prev_total) / prev_total * 100) if prev_total else None
+
+	return {
+		"title": "Faturação de {0}: tendência mensal".format(customer_name),
+		"blocks": [
+			{
+				"type": "trend",
+				"label": "Faturação (últimos 6 meses)",
+				"points": [
+					{"label": _month_label_short(start), "value": total}
+					for (start, _end), total in zip(months, totals)
+				],
+			},
+			{
+				"type": "comparison",
+				"items": [
+					{"label": _month_label(months[-2][0]), "value": _money(prev_total)},
+					{"label": _month_label(months[-1][0]), "value": _money(cur_total)},
+				],
+				"delta_pct": delta_pct,
+			},
+		],
+		"follow_ups": [
+			{
+				"id": "invoicing_customer_all_invoices",
+				"label": "Ver todo o histórico de faturas",
+				"params": {"customer": customer},
+			},
+		],
+	}
+
+
+def h_customer_all_invoices(customer=None, offset=0, **kwargs):
+	if not customer:
+		frappe.throw(_("Cliente não especificado."))
+
+	offset = cint(offset)
+	customer_name = frappe.db.get_value("Customer", customer, "customer_name") or customer
+
+	total = cint(frappe.db.sql(
+		"""select count(*) from `tabSales Invoice` where docstatus = 1 and customer = %(customer)s""",
+		{"customer": customer},
+	)[0][0])
+
 	rows = frappe.db.sql(
 		"""
 		select name, posting_date, grand_total, outstanding_amount, due_date
 		from `tabSales Invoice`
-		where docstatus = 1 and customer = %(customer)s and outstanding_amount > 0
-		order by due_date asc
+		where docstatus = 1 and customer = %(customer)s
+		order by posting_date desc
+		limit %(limit)s offset %(offset)s
 		""",
-		{"customer": customer},
+		{"customer": customer, "limit": CUSTOMER_INVOICES_PAGE_SIZE, "offset": offset},
 		as_dict=True,
 	)
 
 	if not rows:
+		text = (
+			"Não há mais faturas para mostrar." if offset
+			else "{0} ainda não tem faturas submetidas.".format(customer_name)
+		)
 		return {
-			"title": "Detalhe de {0}".format(customer_name),
-			"blocks": [{"type": "text", "text": "{0} não tem faturas em aberto.".format(customer_name)}],
-			"follow_ups": [{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"}],
+			"title": "Histórico de faturas de {0}".format(customer_name),
+			"blocks": [{"type": "text", "text": text}],
+			"follow_ups": [],
 		}
 
 	today = getdate(nowdate())
-	return {
-		"title": "Faturas em aberto de {0}".format(customer_name),
-		"blocks": [{
-			"type": "table",
-			"columns": ["Fatura", "Data", "Valor", "Vencimento", "Estado"],
-			"rows": [
-				[
-					r.name,
-					formatdate(r.posting_date, "dd/MM/yyyy"),
-					_money(r.grand_total),
-					formatdate(r.due_date, "dd/MM/yyyy"),
-					"Vencida" if getdate(r.due_date) < today else "Em dia",
-				]
-				for r in rows
-			],
-			"link_column": {"index": 0, "doctype": "Sales Invoice", "names": [r.name for r in rows]},
-		}],
-		"follow_ups": [
-			{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"},
-			{"id": "invoicing_overdue_invoices", "label": "Quais faturas estão vencidas?"},
+	shown_upto = offset + len(rows)
+
+	def _status(r):
+		if flt(r.outstanding_amount) <= 0:
+			return "Paga"
+		return "Vencida" if getdate(r.due_date) < today else "Em dia"
+
+	table_block = {
+		"type": "table",
+		"columns": ["Fatura", "Data", "Valor", "Estado"],
+		"rows": [
+			[r.name, formatdate(r.posting_date, "dd/MM/yyyy"), _money(r.grand_total), _status(r)]
+			for r in rows
 		],
+		"link_column": {"index": 0, "doctype": "Sales Invoice", "names": [r.name for r in rows]},
+	}
+
+	if shown_upto < total:
+		remaining = total - shown_upto
+		table_block["load_more"] = {
+			"prompt_id": "invoicing_customer_all_invoices",
+			"label": "Mostrar mais {0}".format(min(CUSTOMER_INVOICES_PAGE_SIZE, remaining)),
+			"params": {"customer": customer, "offset": shown_upto},
+			"remaining": remaining,
+		}
+
+	return {
+		"title": "Histórico de faturas de {0} ({1} de {2})".format(customer_name, shown_upto, total),
+		"blocks": [table_block],
+		"follow_ups": [],
 	}
 
 
@@ -577,6 +734,8 @@ HANDLERS = {
 	"invoicing_top_debtors": (h_top_debtors, "Sales Invoice"),
 	"invoicing_overdue_invoices": (h_overdue_invoices, "Sales Invoice"),
 	"invoicing_customer_detail": (h_customer_detail, "Sales Invoice"),
+	"invoicing_customer_trend_comparison": (h_customer_trend_comparison, "Sales Invoice"),
+	"invoicing_customer_all_invoices": (h_customer_all_invoices, "Sales Invoice"),
 	"invoicing_total_this_year": (h_total_this_year, "Sales Invoice"),
 	"invoicing_annual_comparison": (h_annual_comparison, "Sales Invoice"),
 	"invoicing_top_customers_year": (h_top_customers_year, "Sales Invoice"),
@@ -599,6 +758,14 @@ SEARCH_CONFIG = {
 		"result_label": "Ver detalhe de {0}",
 		"extra_filters": {"disabled": 0},
 	},
+}
+
+# When a call includes one of these params, the answer is "about" that entity —
+# the frontend uses this to enter a focused context (KPIs/comparisons scoped to
+# it) until the user picks a different one or exits back to the section. Adding
+# a new entity (supplier, project, ...) is just another entry here.
+CONTEXT_PARAM_KEYS = {
+	"customer": ("Customer", "customer_name"),
 }
 
 
@@ -657,4 +824,12 @@ def ask(prompt_id, params=None):
 	result.setdefault("blocks", [])
 	result.setdefault("follow_ups", [])
 	result["prompt_label"] = PROMPT_LABELS.get(prompt_id) or result.get("title")
+
+	for param_key, (doctype, label_field) in CONTEXT_PARAM_KEYS.items():
+		if params.get(param_key):
+			entity_id = params[param_key]
+			label = frappe.db.get_value(doctype, entity_id, label_field) or entity_id
+			result["context"] = {"type": param_key, "id": entity_id, "label": label}
+			break
+
 	return result
