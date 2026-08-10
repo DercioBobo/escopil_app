@@ -417,6 +417,21 @@
 	background: var(--na-accent-soft);
 }
 
+.na-row-clickable {
+	cursor: pointer;
+}
+
+.na-row-clickable:hover td {
+	background: var(--na-accent-soft);
+}
+
+.na-row-clickable:hover td:last-child::after {
+	content: '›';
+	color: var(--na-accent);
+	font-weight: 600;
+	margin-left: 6px;
+}
+
 /* Suggestions + input ------------------------------------------------------- */
 
 .na-suggestions {
@@ -443,6 +458,11 @@
 	border-color: var(--na-accent);
 	background: var(--na-accent-soft);
 	transform: translateY(-1px);
+}
+
+.na-pill-restart {
+	border-style: dashed;
+	color: var(--na-ink-soft);
 }
 
 .na-inputbar {

@@ -24,6 +24,7 @@ class NextAI {
 		this.sections = [];
 		this.activeSectionId = 'invoicing';
 		this.trail = [];
+		this.asked = new Set();
 		this.setup();
 	}
 
@@ -54,6 +55,8 @@ class NextAI {
 			e.preventDefault();
 			this.handle_free_text();
 		});
+
+		this.page.add_inner_button(__('Reiniciar conversa'), () => this.restart());
 
 		frappe.call('escopil_app.next_ai.page.next_ai.next_ai.get_sections').then((r) => {
 			this.sections = r.message || [];
@@ -93,7 +96,12 @@ class NextAI {
 	switch_section(id) {
 		if (id === this.activeSectionId) return;
 		this.activeSectionId = id;
+		this.restart();
+	}
+
+	restart() {
 		this.trail = [];
+		this.asked = new Set();
 		this.$thread.empty();
 		this.render_rail();
 		this.render_welcome();
@@ -124,7 +132,12 @@ class NextAI {
 
 	// --- asking flow -------------------------------------------------------
 
+	prompt_key(id, params) {
+		return id + '::' + JSON.stringify(params || {});
+	}
+
 	ask_prompt(prompt_id, label, params) {
+		this.asked.add(this.prompt_key(prompt_id, params));
 		this.append_user_bubble(label);
 		this.trail.push(label);
 		this.render_trail();
@@ -231,56 +244,44 @@ class NextAI {
 	}
 
 	append_bot_result(result) {
-		const blocks = (result.blocks || []).map((b) => this.render_block(b)).join('');
-		const title = result.title ? `<div class="na-answer-title">${frappe.utils.escape_html(result.title)}</div>` : '';
-		const isWide = (result.blocks || []).some((b) => b.type === 'table' || b.type === 'comparison' || b.type === 'bar');
-		return this.append_bot_html(`${title}${blocks}`, isWide ? 'na-bubble-wide' : '');
+		const blocks = result.blocks || [];
+		const isWide = blocks.some((b) => b.type === 'table' || b.type === 'comparison' || b.type === 'bar');
+
+		const $row = $(`
+			<div class="na-row na-row-bot">
+				<div class="na-avatar">N</div>
+				<div class="na-bubble na-bubble-bot ${isWide ? 'na-bubble-wide' : ''}"></div>
+			</div>
+		`);
+		const $bubble = $row.find('.na-bubble');
+
+		if (result.title) {
+			$bubble.append(`<div class="na-answer-title">${frappe.utils.escape_html(result.title)}</div>`);
+		}
+		blocks.forEach((block) => $bubble.append(this.render_block(block)));
+
+		this.$thread.append($row);
+		this.scroll_to_bottom();
+		return $row;
 	}
 
 	render_block(block) {
 		if (block.type === 'metric') {
-			return `
+			return $(`
 				<div class="na-metric">
 					<div class="na-metric-label">${frappe.utils.escape_html(block.label)}</div>
 					<div class="na-metric-value">${frappe.utils.escape_html(block.value)}</div>
 				</div>
-			`;
+			`);
 		}
 		if (block.type === 'comparison') {
-			const items = (block.items || []).map((it) => `
-				<div class="na-compare-item">
-					<div class="na-metric-label">${frappe.utils.escape_html(it.label)}</div>
-					<div class="na-metric-value na-metric-value-sm">${frappe.utils.escape_html(it.value)}</div>
-				</div>
-			`).join('<div class="na-compare-arrow">→</div>');
-
-			let delta = '';
-			if (block.delta_pct !== null && block.delta_pct !== undefined) {
-				const up = block.delta_pct >= 0;
-				delta = `
-					<div class="na-delta ${up ? 'is-up' : 'is-down'}">
-						${up ? '▲' : '▼'} ${Math.abs(block.delta_pct).toFixed(1)}%
-					</div>
-				`;
-			}
-			return `<div class="na-compare">${items}</div>${delta}`;
+			return this.render_comparison_block(block);
 		}
 		if (block.type === 'table') {
-			const head = (block.columns || []).map((c) => `<th>${frappe.utils.escape_html(c)}</th>`).join('');
-			const rows = (block.rows || []).map((row) => `
-				<tr>${row.map((cell) => `<td>${frappe.utils.escape_html(String(cell))}</td>`).join('')}</tr>
-			`).join('');
-			return `
-				<div class="na-table-wrap">
-					<table class="na-table">
-						<thead><tr>${head}</tr></thead>
-						<tbody>${rows}</tbody>
-					</table>
-				</div>
-			`;
+			return this.render_table_block(block);
 		}
 		if (block.type === 'text') {
-			return `<p class="na-text">${frappe.utils.escape_html(block.text)}</p>`;
+			return $(`<p class="na-text">${frappe.utils.escape_html(block.text)}</p>`);
 		}
 		if (block.type === 'kpi_grid') {
 			const items = (block.items || []).map((it) => `
@@ -289,18 +290,68 @@ class NextAI {
 					<div class="na-metric-value na-metric-value-sm">${frappe.utils.escape_html(it.value)}</div>
 				</div>
 			`).join('');
-			return `<div class="na-kpi-grid">${items}</div>`;
+			return $(`<div class="na-kpi-grid">${items}</div>`);
 		}
 		if (block.type === 'bar') {
-			return this.render_bar_block(block);
+			return $(this.render_bar_html(block));
 		}
 		if (block.type === 'trend') {
-			return this.render_trend_block(block);
+			return $(this.render_trend_html(block));
 		}
-		return '';
+		return $();
 	}
 
-	render_bar_block(block) {
+	render_comparison_block(block) {
+		const items = (block.items || []).map((it) => `
+			<div class="na-compare-item">
+				<div class="na-metric-label">${frappe.utils.escape_html(it.label)}</div>
+				<div class="na-metric-value na-metric-value-sm">${frappe.utils.escape_html(it.value)}</div>
+			</div>
+		`).join('<div class="na-compare-arrow">→</div>');
+
+		let delta = '';
+		if (block.delta_pct !== null && block.delta_pct !== undefined) {
+			const up = block.delta_pct >= 0;
+			delta = `
+				<div class="na-delta ${up ? 'is-up' : 'is-down'}">
+					${up ? '▲' : '▼'} ${Math.abs(block.delta_pct).toFixed(1)}%
+				</div>
+			`;
+		}
+		return $(`<div class="na-compare-block"><div class="na-compare">${items}</div>${delta}</div>`);
+	}
+
+	render_table_block(block) {
+		const head = (block.columns || []).map((c) => `<th>${frappe.utils.escape_html(c)}</th>`).join('');
+		const rowsHtml = (block.rows || []).map((row, idx) => `
+			<tr data-row-idx="${idx}">${row.map((cell) => `<td>${frappe.utils.escape_html(String(cell))}</td>`).join('')}</tr>
+		`).join('');
+
+		const $wrap = $(`
+			<div class="na-table-wrap">
+				<table class="na-table">
+					<thead><tr>${head}</tr></thead>
+					<tbody>${rowsHtml}</tbody>
+				</table>
+			</div>
+		`);
+
+		if (block.row_prompt_id) {
+			const rowParams = block.row_params || [];
+			const rowLabels = block.row_labels || [];
+			$wrap.find('tbody tr')
+				.addClass('na-row-clickable')
+				.attr('title', __('Ver detalhe'))
+				.on('click', (e) => {
+					const idx = Number($(e.currentTarget).attr('data-row-idx'));
+					this.ask_prompt(block.row_prompt_id, rowLabels[idx] || __('Ver detalhe'), rowParams[idx] || {});
+				});
+		}
+
+		return $wrap;
+	}
+
+	render_bar_html(block) {
 		const items = block.items || [];
 		if (!items.length) return '';
 		const max = block.max || Math.max(...items.map((it) => Number(it.value) || 0), 1);
@@ -321,7 +372,7 @@ class NextAI {
 		return `<div class="na-bar-chart">${rows}</div>`;
 	}
 
-	render_trend_block(block) {
+	render_trend_html(block) {
 		const points = block.points || [];
 		if (!points.length) return '';
 
@@ -358,7 +409,20 @@ class NextAI {
 
 	render_suggestions(prompts) {
 		this.$suggestions.empty();
-		(prompts || []).forEach((p) => {
+
+		const unseen = (prompts || []).filter((p) => !this.asked.has(this.prompt_key(p.id, p.params)));
+		const fallback = unseen.length ? unseen : this.current_section_prompts().filter(
+			(p) => !this.asked.has(this.prompt_key(p.id, p.params))
+		);
+
+		if (!fallback.length) {
+			const $pill = $(`<button type="button" class="na-pill na-pill-restart">${__('Recomeçar')}</button>`);
+			$pill.on('click', () => this.restart());
+			this.$suggestions.append($pill);
+			return;
+		}
+
+		fallback.forEach((p) => {
 			const $pill = $(`<button type="button" class="na-pill">${frappe.utils.escape_html(p.label)}</button>`);
 			$pill.on('click', () => this.ask_prompt(p.id, p.label, p.params));
 			this.$suggestions.append($pill);
