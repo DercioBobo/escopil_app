@@ -218,11 +218,11 @@ class NextAI {
 		return $row;
 	}
 
-	append_bot_html(html) {
+	append_bot_html(html, extraClass) {
 		const $row = $(`
 			<div class="na-row na-row-bot">
 				<div class="na-avatar">N</div>
-				<div class="na-bubble na-bubble-bot">${html}</div>
+				<div class="na-bubble na-bubble-bot ${extraClass || ''}">${html}</div>
 			</div>
 		`);
 		this.$thread.append($row);
@@ -233,7 +233,8 @@ class NextAI {
 	append_bot_result(result) {
 		const blocks = (result.blocks || []).map((b) => this.render_block(b)).join('');
 		const title = result.title ? `<div class="na-answer-title">${frappe.utils.escape_html(result.title)}</div>` : '';
-		return this.append_bot_html(`${title}${blocks}`);
+		const isWide = (result.blocks || []).some((b) => b.type === 'table' || b.type === 'comparison' || b.type === 'bar');
+		return this.append_bot_html(`${title}${blocks}`, isWide ? 'na-bubble-wide' : '');
 	}
 
 	render_block(block) {
@@ -281,7 +282,78 @@ class NextAI {
 		if (block.type === 'text') {
 			return `<p class="na-text">${frappe.utils.escape_html(block.text)}</p>`;
 		}
+		if (block.type === 'kpi_grid') {
+			const items = (block.items || []).map((it) => `
+				<div class="na-kpi">
+					<div class="na-metric-label">${frappe.utils.escape_html(it.label)}</div>
+					<div class="na-metric-value na-metric-value-sm">${frappe.utils.escape_html(it.value)}</div>
+				</div>
+			`).join('');
+			return `<div class="na-kpi-grid">${items}</div>`;
+		}
+		if (block.type === 'bar') {
+			return this.render_bar_block(block);
+		}
+		if (block.type === 'trend') {
+			return this.render_trend_block(block);
+		}
 		return '';
+	}
+
+	render_bar_block(block) {
+		const items = block.items || [];
+		if (!items.length) return '';
+		const max = block.max || Math.max(...items.map((it) => Number(it.value) || 0), 1);
+
+		const rows = items.map((it) => {
+			const pct = Math.max(0, Math.min(100, ((Number(it.value) || 0) / max) * 100));
+			return `
+				<div class="na-bar-row">
+					<div class="na-bar-label" title="${frappe.utils.escape_html(it.label)}">${frappe.utils.escape_html(it.label)}</div>
+					<div class="na-bar-track">
+						<div class="na-bar-fill" style="width:${pct}%"></div>
+					</div>
+					<div class="na-bar-value">${frappe.utils.escape_html(it.display || String(it.value))}</div>
+				</div>
+			`;
+		}).join('');
+
+		return `<div class="na-bar-chart">${rows}</div>`;
+	}
+
+	render_trend_block(block) {
+		const points = block.points || [];
+		if (!points.length) return '';
+
+		const values = points.map((p) => Number(p.value) || 0);
+		const min = Math.min(...values, 0);
+		const max = Math.max(...values, 1);
+		const range = max - min || 1;
+		const W = 300;
+		const H = 70;
+		const PAD = 6;
+		const step = points.length > 1 ? (W - PAD * 2) / (points.length - 1) : 0;
+
+		const coords = points.map((p, i) => {
+			const x = PAD + step * i;
+			const y = H - PAD - (((Number(p.value) || 0) - min) / range) * (H - PAD * 2);
+			return [x, y];
+		});
+		const path = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+		const dots = coords.map(([x, y]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" class="na-trend-dot"></circle>`).join('');
+		const labels = points.map((p) => `<span>${frappe.utils.escape_html(p.label)}</span>`).join('');
+		const title = block.label ? `<div class="na-metric-label">${frappe.utils.escape_html(block.label)}</div>` : '';
+
+		return `
+			<div class="na-trend">
+				${title}
+				<svg viewBox="0 0 ${W} ${H}" class="na-trend-svg" preserveAspectRatio="none">
+					<path d="${path}" class="na-trend-line" fill="none"></path>
+					${dots}
+				</svg>
+				<div class="na-trend-labels">${labels}</div>
+			</div>
+		`;
 	}
 
 	render_suggestions(prompts) {

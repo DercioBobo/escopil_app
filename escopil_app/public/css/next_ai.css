@@ -119,6 +119,7 @@
 .na-thread {
 	flex: 1;
 	overflow-y: auto;
+	overflow-x: hidden;
 	padding: 18px 24px;
 	display: flex;
 	flex-direction: column;
@@ -167,6 +168,11 @@
 	font-size: 13.5px;
 	line-height: 1.5;
 	max-width: 560px;
+	min-width: 0;
+}
+
+.na-bubble-wide {
+	max-width: min(100%, 760px);
 }
 
 .na-bubble p {
@@ -279,6 +285,85 @@
 	color: var(--na-negative);
 }
 
+.na-kpi-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 20px;
+}
+
+.na-bar-chart {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 2px;
+}
+
+.na-bar-row {
+	display: grid;
+	grid-template-columns: minmax(80px, 140px) 1fr auto;
+	align-items: center;
+	gap: 10px;
+	font-size: 12.5px;
+}
+
+.na-bar-label {
+	color: var(--na-ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.na-bar-track {
+	background: var(--na-accent-soft);
+	border-radius: 999px;
+	height: 8px;
+	overflow: hidden;
+}
+
+.na-bar-fill {
+	height: 100%;
+	background: var(--na-accent);
+	border-radius: 999px;
+	transition: width 0.4s ease;
+}
+
+.na-bar-value {
+	color: var(--na-ink-soft);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.na-trend {
+	margin-top: 2px;
+}
+
+.na-trend-svg {
+	width: 100%;
+	height: 70px;
+	display: block;
+	margin-top: 6px;
+	overflow: visible;
+}
+
+.na-trend-line {
+	stroke: var(--na-accent);
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.na-trend-dot {
+	fill: var(--na-accent);
+}
+
+.na-trend-labels {
+	display: flex;
+	justify-content: space-between;
+	font-size: 10.5px;
+	color: var(--na-ink-soft);
+	margin-top: 4px;
+}
+
 .na-text {
 	color: var(--na-ink-soft);
 }
@@ -286,11 +371,23 @@
 .na-table-wrap {
 	overflow-x: auto;
 	margin-top: 2px;
+	scrollbar-width: thin;
+	scrollbar-color: var(--na-line) transparent;
+}
+
+.na-table-wrap::-webkit-scrollbar {
+	height: 6px;
+}
+
+.na-table-wrap::-webkit-scrollbar-thumb {
+	background: var(--na-line);
+	border-radius: 999px;
 }
 
 .na-table {
 	border-collapse: collapse;
 	width: 100%;
+	min-width: max-content;
 	font-size: 13px;
 }
 
@@ -300,15 +397,16 @@
 	text-transform: uppercase;
 	letter-spacing: 0.03em;
 	color: var(--na-ink-soft);
-	padding: 6px 12px 8px 0;
+	padding: 6px 16px 8px 0;
 	border-bottom: 1px solid var(--na-line);
 	white-space: nowrap;
 }
 
 .na-table td {
-	padding: 8px 12px 8px 0;
+	padding: 8px 16px 8px 0;
 	border-bottom: 1px solid var(--na-line);
-	white-space: nowrap;
+	max-width: 260px;
+	overflow-wrap: break-word;
 }
 
 .na-table tr:last-child td {
