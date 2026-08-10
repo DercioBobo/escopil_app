@@ -15,8 +15,7 @@ from frappe.utils import (
 	nowdate,
 )
 
-OVERDUE_PAGE_SIZE = 20
-CUSTOMER_INVOICES_PAGE_SIZE = 20
+PAGE_SIZE = 20
 
 MONTHS_PT = [
 	"Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -197,14 +196,17 @@ def h_top_debtors(**kwargs):
 def h_overdue_invoices(offset=0, **kwargs):
 	offset = cint(offset)
 
-	total = cint(frappe.db.sql(
+	summary = frappe.db.sql(
 		"""
-		select count(*)
+		select count(*) as total_count, sum(outstanding_amount) as total_value
 		from `tabSales Invoice`
 		where docstatus = 1 and outstanding_amount > 0 and due_date < %(today)s
 		""",
 		{"today": nowdate()},
-	)[0][0])
+		as_dict=True,
+	)[0]
+	total = cint(summary.total_count)
+	total_value = flt(summary.total_value)
 
 	rows = frappe.db.sql(
 		"""
@@ -214,7 +216,7 @@ def h_overdue_invoices(offset=0, **kwargs):
 		order by due_date asc
 		limit %(limit)s offset %(offset)s
 		""",
-		{"today": nowdate(), "limit": OVERDUE_PAGE_SIZE, "offset": offset},
+		{"today": nowdate(), "limit": PAGE_SIZE, "offset": offset},
 		as_dict=True,
 	)
 
@@ -246,7 +248,7 @@ def h_overdue_invoices(offset=0, **kwargs):
 		remaining = total - shown_upto
 		table_block["load_more"] = {
 			"prompt_id": "invoicing_overdue_invoices",
-			"label": "Mostrar mais {0}".format(min(OVERDUE_PAGE_SIZE, remaining)),
+			"label": "Mostrar mais {0}".format(min(PAGE_SIZE, remaining)),
 			"params": {"offset": shown_upto},
 			"remaining": remaining,
 		}
@@ -254,14 +256,15 @@ def h_overdue_invoices(offset=0, **kwargs):
 	blocks = [
 		{
 			"type": "text",
-			"text": "A mostrar {0} de {1} faturas vencidas, das mais antigas para as mais recentes.".format(
-				shown_upto, total
+			"text": "A mostrar {0} de {1} faturas vencidas ({2} no total), das mais antigas para as mais recentes.".format(
+				shown_upto, total, _money(total_value)
 			),
 		},
 		table_block,
 	]
 
 	follow_ups = [
+		{"id": "invoicing_aging_report", "label": "Ver por antiguidade de dívida"},
 		{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"},
 		{"id": "invoicing_total_this_month", "label": "Quanto faturámos este mês?"},
 	]
@@ -429,7 +432,7 @@ def h_customer_all_invoices(customer=None, offset=0, **kwargs):
 		order by posting_date desc
 		limit %(limit)s offset %(offset)s
 		""",
-		{"customer": customer, "limit": CUSTOMER_INVOICES_PAGE_SIZE, "offset": offset},
+		{"customer": customer, "limit": PAGE_SIZE, "offset": offset},
 		as_dict=True,
 	)
 
@@ -466,7 +469,7 @@ def h_customer_all_invoices(customer=None, offset=0, **kwargs):
 		remaining = total - shown_upto
 		table_block["load_more"] = {
 			"prompt_id": "invoicing_customer_all_invoices",
-			"label": "Mostrar mais {0}".format(min(CUSTOMER_INVOICES_PAGE_SIZE, remaining)),
+			"label": "Mostrar mais {0}".format(min(PAGE_SIZE, remaining)),
 			"params": {"customer": customer, "offset": shown_upto},
 			"remaining": remaining,
 		}
@@ -497,6 +500,9 @@ def h_total_this_year(**kwargs):
 		as_dict=True,
 	)[0]
 
+	months_elapsed = getdate(nowdate()).month
+	average_monthly = flt(row.total) / months_elapsed if months_elapsed else 0
+
 	return {
 		"title": "Faturação de {0}".format(year),
 		"blocks": [
@@ -507,12 +513,14 @@ def h_total_this_year(**kwargs):
 					{"label": "Recebido", "value": _money(row.received)},
 					{"label": "Em Aberto", "value": _money(row.outstanding)},
 					{"label": "Nº Faturas", "value": str(cint(row.invoice_count))},
+					{"label": "Média Mensal", "value": _money(average_monthly)},
 				],
 			},
 		],
 		"follow_ups": [
 			{"id": "invoicing_annual_comparison", "label": "Comparar com o ano passado"},
 			{"id": "invoicing_top_customers_year", "label": "Quais são os maiores clientes este ano?"},
+			{"id": "invoicing_best_month", "label": "Qual foi o nosso melhor mês este ano?"},
 		],
 	}
 
@@ -602,7 +610,7 @@ def _top_customers(start=None, end=None, limit=10):
 	)
 
 
-def _top_customers_response(rows, title, other_scope_follow_up):
+def _top_customers_response(rows, title, scope_follow_ups):
 	if not rows:
 		return {
 			"title": title,
@@ -636,11 +644,23 @@ def _top_customers_response(rows, title, other_scope_follow_up):
 				"row_labels": ["Ver detalhe de {0}".format(r.customer_name or r.customer) for r in rows],
 			},
 		],
-		"follow_ups": [
-			other_scope_follow_up,
+		"follow_ups": scope_follow_ups + [
 			{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"},
 		],
 	}
+
+
+def h_top_customers_month(**kwargs):
+	start, end = _month_range(0)
+	rows = _top_customers(start, end)
+	return _top_customers_response(
+		rows,
+		"Maiores clientes em {0}".format(_month_label(start)),
+		[
+			{"id": "invoicing_top_customers_year", "label": "Ver este ano"},
+			{"id": "invoicing_top_customers_alltime", "label": "Ver desde sempre"},
+		],
+	)
 
 
 def h_top_customers_year(**kwargs):
@@ -651,7 +671,10 @@ def h_top_customers_year(**kwargs):
 	return _top_customers_response(
 		rows,
 		"Maiores clientes em {0}".format(year),
-		{"id": "invoicing_top_customers_alltime", "label": "Ver desde sempre"},
+		[
+			{"id": "invoicing_top_customers_month", "label": "Ver apenas este mês"},
+			{"id": "invoicing_top_customers_alltime", "label": "Ver desde sempre"},
+		],
 	)
 
 
@@ -660,7 +683,10 @@ def h_top_customers_alltime(**kwargs):
 	return _top_customers_response(
 		rows,
 		"Maiores clientes (desde sempre)",
-		{"id": "invoicing_top_customers_year", "label": "Ver apenas este ano"},
+		[
+			{"id": "invoicing_top_customers_month", "label": "Ver apenas este mês"},
+			{"id": "invoicing_top_customers_year", "label": "Ver apenas este ano"},
+		],
 	)
 
 
@@ -706,6 +732,278 @@ def h_top_invoices_month(**kwargs):
 	}
 
 
+def h_outstanding_total(**kwargs):
+	total = flt(frappe.db.sql(
+		"""
+		select sum(outstanding_amount)
+		from `tabSales Invoice`
+		where docstatus = 1 and outstanding_amount > 0
+		"""
+	)[0][0])
+
+	return {
+		"title": "Total por Receber",
+		"blocks": [
+			{"type": "metric", "label": "Valor em Aberto", "value": _money(total)},
+		],
+		"follow_ups": [
+			{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"},
+			{"id": "invoicing_aging_report", "label": "Ver por antiguidade de dívida"},
+		],
+	}
+
+
+def h_aging_report(**kwargs):
+	today = getdate(nowdate())
+	rows = frappe.db.sql(
+		"""
+		select outstanding_amount, due_date
+		from `tabSales Invoice`
+		where docstatus = 1 and outstanding_amount > 0 and due_date < %(today)s
+		""",
+		{"today": today},
+		as_dict=True,
+	)
+
+	if not rows:
+		return {
+			"title": "Faturas vencidas por antiguidade",
+			"blocks": [{"type": "text", "text": "Não há faturas vencidas neste momento."}],
+			"follow_ups": [{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"}],
+		}
+
+	buckets = {"0-30 dias": 0.0, "31-60 dias": 0.0, "61-90 dias": 0.0, "Mais de 90 dias": 0.0}
+	for r in rows:
+		days = date_diff(today, r.due_date)
+		amount = flt(r.outstanding_amount)
+		if days <= 30:
+			buckets["0-30 dias"] += amount
+		elif days <= 60:
+			buckets["31-60 dias"] += amount
+		elif days <= 90:
+			buckets["61-90 dias"] += amount
+		else:
+			buckets["Mais de 90 dias"] += amount
+
+	total_overdue = sum(buckets.values())
+
+	return {
+		"title": "Faturas vencidas por antiguidade",
+		"blocks": [
+			{"type": "metric", "label": "Total Vencido", "value": _money(total_overdue)},
+			{
+				"type": "bar",
+				"items": [
+					{"label": label, "value": amount, "display": _money(amount)}
+					for label, amount in buckets.items()
+				],
+			},
+		],
+		"follow_ups": [
+			{"id": "invoicing_overdue_invoices", "label": "Ver lista de faturas vencidas"},
+			{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"},
+		],
+	}
+
+
+def h_recent_invoices(**kwargs):
+	rows = frappe.db.sql(
+		"""
+		select name, customer, customer_name, grand_total, posting_date
+		from `tabSales Invoice`
+		where docstatus = 1
+		order by posting_date desc, creation desc
+		limit 10
+		""",
+		as_dict=True,
+	)
+
+	if not rows:
+		return {
+			"title": "Faturas mais recentes",
+			"blocks": [{"type": "text", "text": "Ainda não há faturas submetidas."}],
+			"follow_ups": [{"id": "invoicing_total_this_month", "label": "Quanto faturámos este mês?"}],
+		}
+
+	return {
+		"title": "Faturas mais recentes",
+		"blocks": [{
+			"type": "table",
+			"columns": ["Fatura", "Cliente", "Valor", "Data"],
+			"rows": [
+				[r.name, r.customer_name or r.customer, _money(r.grand_total), formatdate(r.posting_date, "dd/MM/yyyy")]
+				for r in rows
+			],
+			"row_prompt_id": "invoicing_customer_detail",
+			"row_params": [{"customer": r.customer} for r in rows],
+			"row_labels": ["Ver detalhe de {0}".format(r.customer_name or r.customer) for r in rows],
+			"link_column": {"index": 0, "doctype": "Sales Invoice", "names": [r.name for r in rows]},
+		}],
+		"follow_ups": [
+			{"id": "invoicing_top_invoices_month", "label": "Quais as maiores faturas emitidas este mês?"},
+			{"id": "invoicing_total_this_month", "label": "Quanto faturámos este mês?"},
+		],
+	}
+
+
+def h_unpaid_invoices(offset=0, **kwargs):
+	offset = cint(offset)
+
+	summary = frappe.db.sql(
+		"""
+		select count(*) as total_count, sum(outstanding_amount) as total_value
+		from `tabSales Invoice`
+		where docstatus = 1 and outstanding_amount > 0
+		""",
+		as_dict=True,
+	)[0]
+	total = cint(summary.total_count)
+	total_value = flt(summary.total_value)
+
+	rows = frappe.db.sql(
+		"""
+		select name, customer, customer_name, outstanding_amount as amount, due_date
+		from `tabSales Invoice`
+		where docstatus = 1 and outstanding_amount > 0
+		order by due_date asc
+		limit %(limit)s offset %(offset)s
+		""",
+		{"limit": PAGE_SIZE, "offset": offset},
+		as_dict=True,
+	)
+
+	if not rows:
+		text = "Não há mais faturas para mostrar." if offset else "Não há faturas por pagar neste momento."
+		return {
+			"title": "Faturas por pagar",
+			"blocks": [{"type": "text", "text": text}],
+			"follow_ups": [{"id": "invoicing_overdue_invoices", "label": "Quais faturas estão vencidas?"}],
+		}
+
+	today = getdate(nowdate())
+	shown_upto = offset + len(rows)
+
+	table_block = {
+		"type": "table",
+		"columns": ["Fatura", "Cliente", "Valor", "Vencimento"],
+		"rows": [
+			[
+				r.name,
+				r.customer_name or r.customer,
+				_money(r.amount),
+				"Vencida" if getdate(r.due_date) < today else formatdate(r.due_date, "dd/MM/yyyy"),
+			]
+			for r in rows
+		],
+		"row_prompt_id": "invoicing_customer_detail",
+		"row_params": [{"customer": r.customer} for r in rows],
+		"row_labels": ["Ver detalhe de {0}".format(r.customer_name or r.customer) for r in rows],
+		"link_column": {"index": 0, "doctype": "Sales Invoice", "names": [r.name for r in rows]},
+	}
+
+	if shown_upto < total:
+		remaining = total - shown_upto
+		table_block["load_more"] = {
+			"prompt_id": "invoicing_unpaid_invoices",
+			"label": "Mostrar mais {0}".format(min(PAGE_SIZE, remaining)),
+			"params": {"offset": shown_upto},
+			"remaining": remaining,
+		}
+
+	return {
+		"title": "Faturas por pagar",
+		"blocks": [
+			{
+				"type": "text",
+				"text": "A mostrar {0} de {1} faturas por pagar ({2} no total).".format(
+					shown_upto, total, _money(total_value)
+				),
+			},
+			table_block,
+		],
+		"follow_ups": [
+			{"id": "invoicing_overdue_invoices", "label": "Quais faturas estão vencidas?"},
+			{"id": "invoicing_partially_paid", "label": "Quais faturas estão parcialmente pagas?"},
+			{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"},
+		],
+	}
+
+
+def h_partially_paid(**kwargs):
+	rows = frappe.db.sql(
+		"""
+		select name, customer, customer_name, grand_total, outstanding_amount
+		from `tabSales Invoice`
+		where docstatus = 1 and outstanding_amount > 0 and outstanding_amount < grand_total
+		order by outstanding_amount desc
+		limit 20
+		""",
+		as_dict=True,
+	)
+
+	if not rows:
+		return {
+			"title": "Faturas parcialmente pagas",
+			"blocks": [{"type": "text", "text": "Não há faturas parcialmente pagas neste momento."}],
+			"follow_ups": [{"id": "invoicing_unpaid_invoices", "label": "Quais faturas ainda não foram pagas?"}],
+		}
+
+	return {
+		"title": "Faturas parcialmente pagas",
+		"blocks": [{
+			"type": "table",
+			"columns": ["Fatura", "Cliente", "Valor Total", "Ainda em Aberto"],
+			"rows": [
+				[r.name, r.customer_name or r.customer, _money(r.grand_total), _money(r.outstanding_amount)]
+				for r in rows
+			],
+			"row_prompt_id": "invoicing_customer_detail",
+			"row_params": [{"customer": r.customer} for r in rows],
+			"row_labels": ["Ver detalhe de {0}".format(r.customer_name or r.customer) for r in rows],
+			"link_column": {"index": 0, "doctype": "Sales Invoice", "names": [r.name for r in rows]},
+		}],
+		"follow_ups": [
+			{"id": "invoicing_unpaid_invoices", "label": "Quais faturas ainda não foram pagas?"},
+			{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"},
+		],
+	}
+
+
+def h_best_month(**kwargs):
+	year = getdate(nowdate()).year
+	rows = frappe.db.sql(
+		"""
+		select month(posting_date) as mo, sum(grand_total) as total
+		from `tabSales Invoice`
+		where docstatus = 1 and year(posting_date) = %(year)s
+		group by mo
+		""",
+		{"year": year},
+		as_dict=True,
+	)
+
+	if not rows:
+		return {
+			"title": "Melhor mês de {0}".format(year),
+			"blocks": [{"type": "text", "text": "Ainda não há faturas submetidas este ano."}],
+			"follow_ups": [{"id": "invoicing_total_this_year", "label": "Quanto faturámos este ano?"}],
+		}
+
+	best = max(rows, key=lambda r: flt(r.total))
+	best_label = MONTHS_PT[best.mo - 1]
+
+	return {
+		"title": "Melhor mês de {0}".format(year),
+		"blocks": [
+			{"type": "metric", "label": "{0} de {1}".format(best_label, year), "value": _money(best.total)},
+		],
+		"follow_ups": [
+			{"id": "invoicing_annual_comparison", "label": "Comparar faturação anual"},
+			{"id": "invoicing_total_this_year", "label": "Quanto faturámos este ano?"},
+		],
+	}
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -716,9 +1014,13 @@ SECTIONS = [
 		"label": "Faturação",
 		"prompts": [
 			{"id": "invoicing_total_this_month", "label": "Quanto faturámos este mês?"},
+			{"id": "invoicing_outstanding_total", "label": "Quanto temos por receber?"},
 			{"id": "invoicing_total_vs_last_month", "label": "Quanto faturámos este mês vs mês passado?"},
 			{"id": "invoicing_top_debtors", "label": "Quais clientes nos devem mais?"},
 			{"id": "invoicing_overdue_invoices", "label": "Quais faturas estão vencidas?"},
+			{"id": "invoicing_aging_report", "label": "Qual o valor vencido por antiguidade?"},
+			{"id": "invoicing_recent_invoices", "label": "Quais são as faturas mais recentes?"},
+			{"id": "invoicing_unpaid_invoices", "label": "Quais faturas ainda não foram pagas?"},
 			{"id": "invoicing_total_this_year", "label": "Quanto faturámos este ano?"},
 			{"id": "invoicing_annual_comparison", "label": "Comparar faturação anual (este ano vs ano passado)"},
 			{"id": "invoicing_top_customers_year", "label": "Quais são os maiores clientes este ano?"},
@@ -740,7 +1042,14 @@ HANDLERS = {
 	"invoicing_annual_comparison": (h_annual_comparison, "Sales Invoice"),
 	"invoicing_top_customers_year": (h_top_customers_year, "Sales Invoice"),
 	"invoicing_top_customers_alltime": (h_top_customers_alltime, "Sales Invoice"),
+	"invoicing_top_customers_month": (h_top_customers_month, "Sales Invoice"),
 	"invoicing_top_invoices_month": (h_top_invoices_month, "Sales Invoice"),
+	"invoicing_outstanding_total": (h_outstanding_total, "Sales Invoice"),
+	"invoicing_aging_report": (h_aging_report, "Sales Invoice"),
+	"invoicing_recent_invoices": (h_recent_invoices, "Sales Invoice"),
+	"invoicing_unpaid_invoices": (h_unpaid_invoices, "Sales Invoice"),
+	"invoicing_partially_paid": (h_partially_paid, "Sales Invoice"),
+	"invoicing_best_month": (h_best_month, "Sales Invoice"),
 }
 
 PROMPT_LABELS = {p["id"]: p["label"] for section in SECTIONS for p in section["prompts"]}
