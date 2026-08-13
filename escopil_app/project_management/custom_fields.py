@@ -77,6 +77,7 @@ custom_fields = {
 			fieldtype="Link",
 			options="Project Rubrica",
 			insert_after="project",
+			allow_on_submit=1,
 		),
 	],
 	"Purchase Order Item": [
@@ -86,6 +87,7 @@ custom_fields = {
 			fieldtype="Link",
 			options="Project Rubrica",
 			insert_after="project",
+			allow_on_submit=1,
 		),
 	],
 	"Purchase Invoice Item": [
@@ -95,6 +97,7 @@ custom_fields = {
 			fieldtype="Link",
 			options="Project Rubrica",
 			insert_after="project",
+			allow_on_submit=1,
 		),
 	],
 	"Stock Entry": [
