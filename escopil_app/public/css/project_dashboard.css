@@ -183,6 +183,16 @@
 	background: var(--pd-amber);
 }
 
+/* per-rubrica committed (open PO value, c/ IVA) shown under the actual */
+.project-dashboard .pd-cell-committed {
+	display: block;
+	margin-top: 2px;
+	font-size: 10.5px;
+	font-weight: 400;
+	color: var(--pd-amber);
+	font-variant-numeric: tabular-nums;
+}
+
 /* variance heat — actual vs. forecast, color as data */
 .project-dashboard td.pd-variance-under {
 	background: rgba(var(--pd-moss-rgb), var(--pd-alpha, 0.12));

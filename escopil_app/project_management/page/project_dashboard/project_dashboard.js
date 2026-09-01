@@ -171,7 +171,7 @@ class ProjectDashboard {
 				<div class="pd-stat">
 					<span class="pd-stat-label">Custos Comprometidos</span>
 					<span class="pd-stat-value">${fmt(total_committed)}</span>
-					<span class="pd-stat-sub">Encomendado, ainda não faturado</span>
+					<span class="pd-stat-sub">Encomendado c/ IVA, ainda não faturado</span>
 				</div>
 				<div class="pd-stat">
 					<span class="pd-stat-label">Previsão de Faturação</span>
@@ -212,9 +212,13 @@ class ProjectDashboard {
 				</td>
 				${months.map(m => {
 					const actual = r.actuals[m.key] || 0;
+					const committed = (r.committed && r.committed[m.key]) || 0;
 					const v = this.variance_class(actual, r.monthly_forecast);
 					const style = v.cls ? ` style="--pd-alpha:${v.alpha}"` : '';
-					return `<td class="text-right ${v.cls}"${style}>${fmt(actual)}</td>`;
+					const committed_sub = committed
+						? `<span class="pd-cell-committed">+${fmt(committed)} comp.</span>`
+						: '';
+					return `<td class="text-right ${v.cls}"${style}>${fmt(actual)}${committed_sub}</td>`;
 				}).join('')}
 			</tr>
 		`).join('');

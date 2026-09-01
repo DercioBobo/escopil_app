@@ -69,21 +69,26 @@ def get_dashboard_data(project):
 
 	committed_rows = frappe.db.sql(
 		"""
-		select date_format(po.transaction_date, '%%Y-%%m') as month_key,
-			sum(item.amount - item.billed_amt) as total
+		select po.custom_rubrica as rubrica,
+			date_format(po.transaction_date, '%%Y-%%m') as month_key,
+			sum(po.base_grand_total * (100 - po.per_billed) / 100) as total
 		from `tabPurchase Order` po
-		inner join `tabPurchase Order Item` item on item.parent = po.name
 		where po.docstatus = 1
 			and ifnull(po.buying_mode, '') != 'Petty Cash'
-			and item.project = %(project)s
-			and item.custom_rubrica is not null and item.custom_rubrica != ''
-		group by month_key
+			and po.project = %(project)s
+			and ifnull(po.custom_rubrica, '') != ''
+		group by rubrica, month_key
 		having total > 0
 		""",
 		{"project": project},
 		as_dict=True,
 	)
-	committed_map = {row.month_key: flt(row.total) for row in committed_rows}
+	committed_map = {}
+	committed_by_month = {m: 0.0 for m in months}
+	for row in committed_rows:
+		committed_map.setdefault(row.rubrica, {})[row.month_key] = flt(row.total)
+		if row.month_key in committed_by_month:
+			committed_by_month[row.month_key] += flt(row.total)
 
 	billing_rows = frappe.get_all(
 		"Project Billing Entry",
@@ -99,6 +104,7 @@ def get_dashboard_data(project):
 	totals_by_month = {m: 0.0 for m in months}
 	for r in rubrica_rows:
 		row_actuals = actuals_map.get(r.rubrica, {})
+		row_committed = committed_map.get(r.rubrica, {})
 		for m in months:
 			totals_by_month[m] += flt(row_actuals.get(m))
 		rubricas.append({
@@ -106,6 +112,7 @@ def get_dashboard_data(project):
 			"monthly_forecast": flt(r.monthly_forecast),
 			"weight": (flt(r.monthly_forecast) / total_forecast) if total_forecast else 0,
 			"actuals": {m: flt(row_actuals.get(m)) for m in months},
+			"committed": {m: flt(row_committed.get(m)) for m in months},
 		})
 
 	margin_by_month = {}
@@ -121,7 +128,7 @@ def get_dashboard_data(project):
 		"rubricas": rubricas,
 		"total_forecast": total_forecast,
 		"totals": totals_by_month,
-		"committed": {m: flt(committed_map.get(m)) for m in months},
+		"committed": {m: flt(committed_by_month.get(m)) for m in months},
 		"billing": {m: flt(billing_map.get(m)) for m in months},
 		"billing_forecast": billing_forecast_by_month,
 		"margin": margin_by_month,
