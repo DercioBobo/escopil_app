@@ -140,6 +140,7 @@ function render_budget_entries_section(frm) {
 		add_label: __('Adicionar Faturação'),
 		order_by: 'month desc',
 		lock_field: 'is_auto_generated',
+		lock_editable_fields: ['month'],
 		columns: [
 			{ fieldname: 'month', label: __('Mês'), format: (v) => format_month_pt(v) },
 			{ fieldname: 'billable_amount', label: __('Valor Faturado'), format: (v) => format_currency(v) },
@@ -154,7 +155,7 @@ function render_budget_entries_section(frm) {
 }
 
 class ProjectEntryTable {
-	constructor({ frm, wrapper, doctype, add_label, columns, dialog_fields, default_values, order_by, lock_field }) {
+	constructor({ frm, wrapper, doctype, add_label, columns, dialog_fields, default_values, order_by, lock_field, lock_editable_fields }) {
 		this.frm = frm;
 		this.doctype = doctype;
 		this.columns = columns;
@@ -162,6 +163,8 @@ class ProjectEntryTable {
 		this.default_values = default_values || {};
 		this.order_by = order_by || 'creation desc';
 		this.lock_field = lock_field;
+		// fields still editable on an auto-generated (locked) row
+		this.lock_editable_fields = lock_editable_fields || [];
 
 		this.$wrapper = $(`
 			<div class="pd-entry-block">
@@ -222,21 +225,28 @@ class ProjectEntryTable {
 		$body.find('.pd-entry-row').on('click', (e) => {
 			const $row = $(e.currentTarget);
 			if ($row.hasClass('pd-row-locked')) {
-				frappe.show_alert({
-					message: __('Lançamento gerado automaticamente a partir de uma Fatura de Compra — não pode ser editado aqui.'),
-					indicator: 'orange',
-				});
+				if (this.lock_editable_fields.length) {
+					this.open_dialog($row.data('name'), { restrict: true });
+				} else {
+					frappe.show_alert({
+						message: __('Lançamento gerado automaticamente — só pode ser alterado no documento de origem.'),
+						indicator: 'orange',
+					});
+				}
 				return;
 			}
 			this.open_dialog($row.data('name'));
 		});
 	}
 
-	open_dialog(name) {
+	open_dialog(name, { restrict = false } = {}) {
 		const is_new = !name;
+		const fields = restrict
+			? this.dialog_fields.filter((f) => this.lock_editable_fields.includes(f.fieldname))
+			: this.dialog_fields;
 		const dialog = new frappe.ui.Dialog({
-			title: is_new ? __('Novo Lançamento') : __('Editar Lançamento'),
-			fields: this.dialog_fields,
+			title: is_new ? __('Novo Lançamento') : (restrict ? __('Ajustar Data') : __('Editar Lançamento')),
+			fields,
 			primary_action_label: is_new ? __('Adicionar') : __('Guardar'),
 			primary_action: (values) => {
 				const action = is_new

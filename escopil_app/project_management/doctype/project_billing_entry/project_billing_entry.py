@@ -38,9 +38,10 @@ class ProjectBillingEntry(Document):
 		if not before_save:
 			return
 
+		# `month` stays editable: the user may shift an auto entry to a different
+		# recognition month without touching the billed value or its source link
 		protected_fields = (
 			"project",
-			"month",
 			"billable_amount",
 			"reference_doctype",
 			"reference_name",
@@ -49,7 +50,7 @@ class ProjectBillingEntry(Document):
 		for fieldname in protected_fields:
 			if before_save.get(fieldname) != self.get(fieldname):
 				frappe.throw(
-					_("Não é possível editar um lançamento gerado automaticamente a partir de {0} {1}.").format(
+					_("Não é possível alterar este campo num lançamento gerado automaticamente a partir de {0} {1}. Só a data pode ser ajustada.").format(
 						self.reference_doctype, self.reference_name
 					)
 				)
