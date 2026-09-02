@@ -244,13 +244,12 @@ def _sync_missing_cost_entries(project):
 def _sync_missing_petty_cash_entries(project):
 	po_names = frappe.db.sql_list(
 		"""
-		select distinct po.name
-		from `tabPurchase Order` po
-		inner join `tabPurchase Order Item` item on item.parent = po.name
-		where po.docstatus = 1
-			and po.buying_mode = 'Petty Cash'
-			and item.project = %s
-			and item.custom_rubrica is not null and item.custom_rubrica != ''
+		select name
+		from `tabPurchase Order`
+		where docstatus = 1
+			and buying_mode = 'Petty Cash'
+			and project = %s
+			and ifnull(custom_rubrica, '') != ''
 		""",
 		project,
 	)
