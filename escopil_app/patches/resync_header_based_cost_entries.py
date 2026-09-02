@@ -4,6 +4,11 @@ import frappe
 
 from escopil_app.project_management.utils import (
 	_sync,
+	_sync_missing_billing_entries,
+	_sync_missing_cost_entries,
+	_sync_missing_petty_cash_entries,
+	_sync_missing_stock_entry_cost_entries,
+	_sync_missing_vehicle_log_cost_entries,
 	create_billing_entries_from_sales_invoice,
 	create_cost_entries_from_purchase_invoice,
 	create_cost_entries_from_purchase_order,
@@ -18,7 +23,12 @@ from escopil_app.project_management.utils import (
 # source documents whose header actually carries the fields we now read. If the
 # header is blank (older docs that only had the data on the line items), the old
 # line-based entries are left untouched and the doc is logged, so nothing is lost
-# silently. Backfill those headers, then re-run the project's sync button.
+# silently. backfill_doc_header_rubrica_project runs first and fills most of
+# those headers from the lines; whatever it could not resolve (mixed lines) shows
+# up in this patch's Error Log for a human to fix, then a project sync picks it up.
+#
+# After rebuilding, it also runs the "sync missing" pass for every cost-control
+# project, so docs the old line-based logic never created an entry for are caught.
 
 
 def _pi_ready(doc):
@@ -103,3 +113,15 @@ def execute():
 			+ "\n".join(sorted(skipped)),
 			title="resync_header_based_cost_entries",
 		)
+
+	# headers are populated by now (see backfill_doc_header_rubrica_project), so
+	# create any entry the old line-based logic never made for a doc it skipped
+	projects = frappe.get_all(
+		"Project", filters={"custom_cost_control_enabled": 1}, pluck="name"
+	)
+	for project in projects:
+		_sync_missing_cost_entries(project)
+		_sync_missing_petty_cash_entries(project)
+		_sync_missing_stock_entry_cost_entries(project)
+		_sync_missing_vehicle_log_cost_entries(project)
+		_sync_missing_billing_entries(project)
