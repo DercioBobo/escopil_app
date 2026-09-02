@@ -46,6 +46,8 @@ def create_cost_entries_from_purchase_invoice(doc, method=None):
 		return
 	if not flt(doc.base_grand_total):
 		return
+	if _auto_entry_exists("Project Cost Entry", "Purchase Invoice", doc.name):
+		return
 
 	_sync(lambda: frappe.get_doc({
 		"doctype": "Project Cost Entry",
@@ -67,7 +69,7 @@ def remove_cost_entries_from_purchase_invoice(doc, method=None):
 		pluck="name",
 	)
 	for name in names:
-		_sync(lambda: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
+		_sync(lambda name=name: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
 
 
 def create_cost_entries_from_purchase_order(doc, method=None):
@@ -81,6 +83,8 @@ def create_cost_entries_from_purchase_order(doc, method=None):
 	if not (doc.get("project") and doc.get("custom_rubrica")):
 		return
 	if not flt(doc.base_grand_total):
+		return
+	if _auto_entry_exists("Project Cost Entry", "Purchase Order", doc.name):
 		return
 
 	_sync(lambda: frappe.get_doc({
@@ -103,7 +107,7 @@ def remove_cost_entries_from_purchase_order(doc, method=None):
 		pluck="name",
 	)
 	for name in names:
-		_sync(lambda: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
+		_sync(lambda name=name: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
 
 
 def create_cost_entries_from_stock_entry(doc, method=None):
@@ -112,6 +116,8 @@ def create_cost_entries_from_stock_entry(doc, method=None):
 	if not doc.get("custom_rubrica"):
 		return
 	if not flt(doc.total_outgoing_value):
+		return
+	if _auto_entry_exists("Project Cost Entry", "Stock Entry", doc.name):
 		return
 
 	_sync(lambda: frappe.get_doc({
@@ -134,11 +140,13 @@ def remove_cost_entries_from_stock_entry(doc, method=None):
 		pluck="name",
 	)
 	for name in names:
-		_sync(lambda: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
+		_sync(lambda name=name: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
 
 
 def create_cost_entries_from_vehicle_log(doc, method=None):
 	if not doc.get("project") or not flt(doc.get("total_paid")):
+		return
+	if _auto_entry_exists("Project Cost Entry", "Vehicle Log", doc.name):
 		return
 
 	_sync(lambda: frappe.get_doc({
@@ -161,7 +169,7 @@ def remove_cost_entries_from_vehicle_log(doc, method=None):
 		pluck="name",
 	)
 	for name in names:
-		_sync(lambda: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
+		_sync(lambda name=name: frappe.delete_doc("Project Cost Entry", name, ignore_permissions=True), flag="in_project_cost_sync")
 
 
 def create_billing_entries_from_sales_invoice(doc, method=None):
@@ -170,6 +178,8 @@ def create_billing_entries_from_sales_invoice(doc, method=None):
 	if not doc.get("project"):
 		return
 	if not flt(doc.base_grand_total):
+		return
+	if _auto_entry_exists("Project Billing Entry", "Sales Invoice", doc.name):
 		return
 
 	_sync(lambda: frappe.get_doc({
@@ -202,9 +212,65 @@ def _sync(action, flag="in_project_cost_sync"):
 		frappe.flags[flag] = False
 
 
+# entry doctype -> the sync flag that lets its on_trash guard delete auto entries
+_SYNC_FLAG = {
+	"Project Cost Entry": "in_project_cost_sync",
+	"Project Billing Entry": "in_project_billing_sync",
+}
+
+
+def _auto_entry_exists(entry_doctype, reference_doctype, reference_name):
+	"""True when an auto-generated entry for this source document already exists.
+	Every create_* path checks this first, so running it again — submit hook,
+	manual sync, migration patch — never produces a second entry."""
+	return bool(
+		frappe.db.exists(
+			entry_doctype,
+			{
+				"reference_doctype": reference_doctype,
+				"reference_name": reference_name,
+				"is_auto_generated": 1,
+			},
+		)
+	)
+
+
+def _dedupe_auto_entries(project):
+	"""Remove any pre-existing duplicate auto-generated entries for a project
+	(same source document referenced more than once), keeping the oldest."""
+	removed = 0
+	for entry_doctype, flag in _SYNC_FLAG.items():
+		rows = frappe.get_all(
+			entry_doctype,
+			filters={
+				"project": project,
+				"is_auto_generated": 1,
+				"reference_name": ["is", "set"],
+			},
+			fields=["name", "reference_doctype", "reference_name"],
+			order_by="creation asc",
+		)
+		seen = set()
+		for row in rows:
+			key = (row.reference_doctype, row.reference_name)
+			if key in seen:
+				_sync(
+					lambda dt=entry_doctype, n=row.name: frappe.delete_doc(
+						dt, n, ignore_permissions=True, force=True
+					),
+					flag=flag,
+				)
+				removed += 1
+			else:
+				seen.add(key)
+	return removed
+
+
 @frappe.whitelist()
 def sync_project_entries(project):
 	frappe.has_permission("Project", "write", doc=project, throw=True)
+
+	duplicates_removed = _dedupe_auto_entries(project)
 
 	return {
 		"cost_created": (
@@ -214,6 +280,7 @@ def sync_project_entries(project):
 			+ _sync_missing_vehicle_log_cost_entries(project)
 		),
 		"billing_created": _sync_missing_billing_entries(project),
+		"duplicates_removed": duplicates_removed,
 	}
 
 

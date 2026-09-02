@@ -131,6 +131,8 @@ def get_dashboard_data(project):
 		"committed": {m: flt(committed_by_month.get(m)) for m in months},
 		"billing": {m: flt(billing_map.get(m)) for m in months},
 		"billing_forecast": billing_forecast_by_month,
+		"billing_forecast_default": default_billing_forecast,
+		"billing_forecast_is_override": {m: (m in billing_forecast_overrides) for m in months},
 		"margin": margin_by_month,
 		"margin_pct": margin_pct_by_month,
 	}
@@ -168,6 +170,32 @@ def get_cell_breakdown(project, kind, month, rubrica=None):
 	frappe.throw(_("Tipo de detalhe desconhecido: {0}").format(kind))
 
 
+# source doctype -> field holding the party name to show in the breakdown
+_PARTY_FIELD = {
+	"Purchase Invoice": "supplier_name",
+	"Purchase Order": "supplier_name",
+	"Sales Invoice": "customer_name",
+}
+
+
+def _attach_parties(entries):
+	names_by_doctype = {}
+	for e in entries:
+		if e.get("doctype") in _PARTY_FIELD and e.get("docname"):
+			names_by_doctype.setdefault(e["doctype"], set()).add(e["docname"])
+
+	party_by_ref = {}
+	for doctype, names in names_by_doctype.items():
+		field = _PARTY_FIELD[doctype]
+		for row in frappe.get_all(
+			doctype, filters={"name": ["in", list(names)]}, fields=["name", field]
+		):
+			party_by_ref[(doctype, row["name"])] = row.get(field)
+
+	for e in entries:
+		e["party"] = party_by_ref.get((e.get("doctype"), e.get("docname")))
+
+
 def _cost_breakdown(project, first_day, last_day, rubrica=None, rubricas=None):
 	filters = {"project": project, "posting_date": ["between", [first_day, last_day]]}
 	if rubrica:
@@ -184,6 +212,7 @@ def _cost_breakdown(project, first_day, last_day, rubrica=None, rubricas=None):
 		],
 		order_by="posting_date asc, creation asc",
 	)
+	_attach_parties(entries)
 	return _pack(entries)
 
 
@@ -197,6 +226,26 @@ def _billing_breakdown(project, first_day, last_day):
 		],
 		order_by="month asc, creation asc",
 	)
+
+	# the billing entry's `month` is snapped to the 1st; show the real invoice
+	# date (and customer) from the source Sales Invoice where there is one
+	si_names = [e["docname"] for e in entries if e["doctype"] == "Sales Invoice" and e["docname"]]
+	if si_names:
+		si_map = {
+			r["name"]: r
+			for r in frappe.get_all(
+				"Sales Invoice",
+				filters={"name": ["in", si_names]},
+				fields=["name", "posting_date", "customer_name"],
+			)
+		}
+		for e in entries:
+			si = si_map.get(e["docname"]) if e["doctype"] == "Sales Invoice" else None
+			if si:
+				e["date"] = si["posting_date"]
+				e["party"] = si["customer_name"]
+
+	entries.sort(key=lambda e: (e["date"], e.get("docname") or ""))
 	return _pack(entries)
 
 
@@ -210,7 +259,7 @@ def _committed_breakdown(project, first_day, last_day, rubrica=None):
 	rows = frappe.db.sql(
 		"""
 		select po.name as docname, po.transaction_date as date,
-			po.custom_rubrica as rubrica, po.base_grand_total, po.per_billed
+			po.custom_rubrica as rubrica, po.supplier_name, po.base_grand_total, po.per_billed
 		from `tabPurchase Order` po
 		where po.docstatus = 1
 			and ifnull(po.buying_mode, '') != 'Petty Cash'
@@ -240,6 +289,7 @@ def _committed_breakdown(project, first_day, last_day, rubrica=None):
 			entries.append({
 				"date": po.date,
 				"rubrica": po.rubrica,
+				"party": po.supplier_name,
 				"amount": remaining,
 				"origem": _("Encomenda"),
 				"doctype": "Purchase Order",

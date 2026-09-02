@@ -69,10 +69,14 @@ frappe.ui.form.on('Project', {
 				freeze_message: __('A sincronizar custos e faturação...'),
 				callback: (r) => {
 					if (!r.message) return;
-					const { cost_created, billing_created } = r.message;
+					const { cost_created, billing_created, duplicates_removed } = r.message;
+					let message = __('{0} novo(s) lançamento(s) de custo e {1} de faturação sincronizados.', [cost_created, billing_created]);
+					if (duplicates_removed) {
+						message += ' ' + __('{0} duplicado(s) removido(s).', [duplicates_removed]);
+					}
 					frappe.show_alert({
-						message: __('{0} novo(s) lançamento(s) de custo e {1} de faturação sincronizados.', [cost_created, billing_created]),
-						indicator: (cost_created || billing_created) ? 'green' : 'blue',
+						message,
+						indicator: (cost_created || billing_created || duplicates_removed) ? 'green' : 'blue',
 					});
 					render_budget_entries_section(frm);
 				},

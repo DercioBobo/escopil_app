@@ -298,11 +298,19 @@
 }
 
 /* ---- Drill-down: clickable ledger cells + breakdown modal ---- */
-.project-dashboard td.pd-drill {
+.project-dashboard td.pd-drill,
+.project-dashboard td.pd-drill-calc {
 	cursor: pointer;
 }
-.project-dashboard td.pd-drill:hover {
+.project-dashboard td.pd-drill:hover,
+.project-dashboard td.pd-drill-calc:hover {
 	box-shadow: inset 0 0 0 1px var(--pd-amber);
+}
+.project-dashboard .pd-drill-committed {
+	cursor: pointer;
+}
+.project-dashboard .pd-drill-committed:hover {
+	text-decoration: underline;
 }
 .project-dashboard.pd-breakdown {
 	padding: 4px 0 0;

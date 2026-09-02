@@ -149,6 +149,7 @@ class ProjectDashboard {
 		const months = data.months;
 		const n_months = months.length || 1;
 
+		this._data = data;
 		this._month_labels = {};
 		months.forEach((m) => { this._month_labels[m.key] = m.label; });
 
@@ -220,7 +221,7 @@ class ProjectDashboard {
 					const v = this.variance_class(actual, r.monthly_forecast);
 					const style = v.cls ? ` style="--pd-alpha:${v.alpha}"` : '';
 					const committed_sub = committed
-						? `<span class="pd-cell-committed">+${fmt(committed)} comp.</span>`
+						? `<span class="pd-cell-committed pd-drill-committed" data-month="${m.key}" data-rubrica="${frappe.utils.escape_html(r.rubrica)}">+${fmt(committed)} comp.</span>`
 						: '';
 					const cls = `text-right ${v.cls}${actual ? ' pd-drill' : ''}`.trim();
 					const drill = actual
@@ -258,7 +259,7 @@ class ProjectDashboard {
 		const billing_forecast_row = `
 			<tr class="pd-row-billing-forecast">
 				<td class="text-left" colspan="3">Valor a Cobrar</td>
-				${months.map(m => `<td class="text-right">${fmt(data.billing_forecast[m.key])}</td>`).join('')}
+				${months.map(m => `<td class="text-right pd-drill-calc" data-kind="billing_forecast" data-month="${m.key}">${fmt(data.billing_forecast[m.key])}</td>`).join('')}
 			</tr>
 		`;
 
@@ -282,7 +283,9 @@ class ProjectDashboard {
 				${months.map(m => {
 					const margin = data.margin[m.key] || 0;
 					const cls = margin > 0 ? 'pd-variance-under' : (margin < 0 ? 'pd-variance-over' : '');
-					return `<td class="text-right ${cls}">${fmt(margin)}</td>`;
+					const drillable = (data.billing[m.key] || data.totals[m.key]) ? ' pd-drill-calc' : '';
+					const drill = drillable ? ` data-kind="margin" data-month="${m.key}"` : '';
+					return `<td class="text-right ${cls}${drillable}"${drill}>${fmt(margin)}</td>`;
 				}).join('')}
 			</tr>
 		`;
@@ -293,7 +296,9 @@ class ProjectDashboard {
 				${months.map(m => {
 					const v = data.margin_pct[m.key] || 0;
 					const cls = v > 0 ? 'pd-variance-under' : (v < 0 ? 'pd-variance-over' : '');
-					return `<td class="text-right ${cls}">${pct(v)}</td>`;
+					const drillable = (data.billing[m.key] || data.totals[m.key]) ? ' pd-drill-calc' : '';
+					const drill = drillable ? ` data-kind="margin_pct" data-month="${m.key}"` : '';
+					return `<td class="text-right ${cls}${drillable}"${drill}>${pct(v)}</td>`;
 				}).join('')}
 			</tr>
 		`;
@@ -315,6 +320,85 @@ class ProjectDashboard {
 			const $td = $(e.currentTarget);
 			this.show_breakdown($td.attr('data-kind'), $td.attr('data-month'), $td.attr('data-rubrica') || null);
 		});
+
+		// the "+X comp." note drills the committed value for that one rubrica,
+		// not the whole month — stop the click reaching the cost cell behind it
+		this.$content.find('.pd-drill-committed').on('click', (e) => {
+			e.stopPropagation();
+			const $s = $(e.currentTarget);
+			this.show_breakdown('committed', $s.attr('data-month'), $s.attr('data-rubrica'));
+		});
+
+		// derived cells (a cobrar / margem / margem %) have no source docs —
+		// clicking them shows how the number is computed
+		this.$content.find('td.pd-drill-calc').on('click', (e) => {
+			const $td = $(e.currentTarget);
+			this.show_computation($td.attr('data-kind'), $td.attr('data-month'));
+		});
+	}
+
+	show_computation(kind, month) {
+		const data = this._data;
+		if (!data) return;
+		const fmt = (v) => format_currency(v || 0);
+		const pct = (v) => (v || 0).toFixed(1) + '%';
+		const ml = (this._month_labels && this._month_labels[month]) || month;
+
+		let title;
+		let lines;
+		let result;
+
+		if (kind === 'billing_forecast') {
+			const is_override = data.billing_forecast_is_override && data.billing_forecast_is_override[month];
+			title = `${__('Valor a Cobrar')} · ${ml}`;
+			lines = [[__('Previsão mensal padrão (do Projeto)'), fmt(data.billing_forecast_default)]];
+			if (is_override) {
+				lines.push([__('Ajuste mensal para {0}', [ml]), fmt(data.billing_forecast[month])]);
+			}
+			lines.push([__('Aplicado a este mês'), is_override ? __('Ajuste mensal') : __('Valor padrão')]);
+			result = [__('Valor a Cobrar'), fmt(data.billing_forecast[month])];
+		} else if (kind === 'margin') {
+			title = `${__('Margem')} · ${ml}`;
+			lines = [
+				[__('Valor Faturado'), fmt(data.billing[month])],
+				[__('(−) Custos Reais'), fmt(data.totals[month])],
+			];
+			result = [__('Margem'), fmt(data.margin[month])];
+		} else if (kind === 'margin_pct') {
+			title = `${__('Margem %')} · ${ml}`;
+			lines = [
+				[__('Margem'), fmt(data.margin[month])],
+				[__('(÷) Valor Faturado'), fmt(data.billing[month])],
+			];
+			result = [__('Margem %'), pct(data.margin_pct[month])];
+		} else {
+			return;
+		}
+
+		const body = lines.map(([label, value]) => `
+			<tr>
+				<td class="text-left">${frappe.utils.escape_html(label)}</td>
+				<td class="text-right">${frappe.utils.escape_html(String(value))}</td>
+			</tr>`).join('');
+
+		const dialog = new frappe.ui.Dialog({
+			title,
+			fields: [{ fieldtype: 'HTML', fieldname: 'body' }],
+		});
+		dialog.fields_dict.body.$wrapper.html(`
+			<div class="project-dashboard pd-breakdown">
+				<table class="pd-ledger pd-ledger-compact pd-breakdown-table">
+					<tbody>${body}</tbody>
+					<tfoot>
+						<tr class="pd-row-total">
+							<td class="text-left">${frappe.utils.escape_html(result[0])}</td>
+							<td class="text-right">${frappe.utils.escape_html(String(result[1]))}</td>
+						</tr>
+					</tfoot>
+				</table>
+			</div>
+		`);
+		dialog.show();
 	}
 
 	show_breakdown(kind, month, rubrica) {
@@ -341,8 +425,9 @@ class ProjectDashboard {
 		const month_label = (this._month_labels && this._month_labels[month]) || month;
 		const title = [KIND_LABEL[kind] || kind, rubrica, month_label].filter(Boolean).join(' · ');
 		const show_rubrica = kind === 'cost_total';
+		const party_label = kind === 'billing' ? __('Cliente') : __('Fornecedor');
 		const rows = payload.rows || [];
-		const span = show_rubrica ? 4 : 3;
+		const span = show_rubrica ? 5 : 4;
 
 		let table;
 		if (!rows.length) {
@@ -360,6 +445,7 @@ class ProjectDashboard {
 						<td class="text-left">${frappe.datetime.str_to_user(row.date)}</td>
 						${show_rubrica ? `<td class="text-left">${frappe.utils.escape_html(row.rubrica || '')}</td>` : ''}
 						<td class="text-left">${doc_cell}</td>
+						<td class="text-left">${frappe.utils.escape_html(row.party || '')}</td>
 						<td class="text-left">${frappe.utils.escape_html(row.origem || '')}</td>
 						<td class="text-right">${fmt(row.amount)}</td>
 					</tr>${note}`;
@@ -372,6 +458,7 @@ class ProjectDashboard {
 							<th class="text-left">${__('Data')}</th>
 							${show_rubrica ? `<th class="text-left">${__('Rubrica')}</th>` : ''}
 							<th class="text-left">${__('Documento')}</th>
+							<th class="text-left">${party_label}</th>
 							<th class="text-left">${__('Origem')}</th>
 							<th class="text-right">${__('Valor')}</th>
 						</tr>
