@@ -313,10 +313,18 @@
 	text-decoration: underline;
 }
 .project-dashboard.pd-breakdown {
-	padding: 4px 0 0;
+	padding: 0;
+	background: var(--pd-paper);
+	color: var(--pd-ink);
+}
+.project-dashboard .pd-breakdown-scroll {
+	overflow-x: auto;
+	background: var(--pd-paper);
 }
 .project-dashboard .pd-breakdown-table {
 	white-space: normal;
+	width: 100%;
+	background: var(--pd-paper);
 }
 .project-dashboard .pd-breakdown-table thead th.text-left {
 	text-align: left;

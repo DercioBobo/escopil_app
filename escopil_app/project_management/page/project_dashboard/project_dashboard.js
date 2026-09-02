@@ -385,20 +385,31 @@ class ProjectDashboard {
 			title,
 			fields: [{ fieldtype: 'HTML', fieldname: 'body' }],
 		});
+		this._solidify_modal(dialog);
 		dialog.fields_dict.body.$wrapper.html(`
 			<div class="project-dashboard pd-breakdown">
-				<table class="pd-ledger pd-ledger-compact pd-breakdown-table">
-					<tbody>${body}</tbody>
-					<tfoot>
-						<tr class="pd-row-total">
-							<td class="text-left">${frappe.utils.escape_html(result[0])}</td>
-							<td class="text-right">${frappe.utils.escape_html(String(result[1]))}</td>
-						</tr>
-					</tfoot>
-				</table>
+				<div class="pd-breakdown-scroll">
+					<table class="pd-ledger pd-ledger-compact pd-breakdown-table">
+						<tbody>${body}</tbody>
+						<tfoot>
+							<tr class="pd-row-total">
+								<td class="text-left">${frappe.utils.escape_html(result[0])}</td>
+								<td class="text-right">${frappe.utils.escape_html(String(result[1]))}</td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
 			</div>
 		`);
 		dialog.show();
+	}
+
+	// some themes leave .modal-content / .modal-body transparent, which lets the
+	// ledger behind bleed through the breakdown table — force an opaque surface
+	_solidify_modal(dialog) {
+		dialog.$wrapper
+			.find('.modal-content, .modal-body')
+			.css('background-color', 'var(--card-bg, var(--bg-color, #fff))');
 	}
 
 	show_breakdown(kind, month, rubrica) {
@@ -478,7 +489,8 @@ class ProjectDashboard {
 			size: 'large',
 			fields: [{ fieldtype: 'HTML', fieldname: 'body' }],
 		});
-		dialog.fields_dict.body.$wrapper.html(`<div class="project-dashboard pd-breakdown">${table}</div>`);
+		this._solidify_modal(dialog);
+		dialog.fields_dict.body.$wrapper.html(`<div class="project-dashboard pd-breakdown"><div class="pd-breakdown-scroll">${table}</div></div>`);
 		dialog.$wrapper.find('.pd-drill-link').on('click', (e) => {
 			const $a = $(e.currentTarget);
 			frappe.set_route('Form', $a.data('doctype'), $a.data('docname'));
