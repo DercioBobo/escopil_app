@@ -20,5 +20,5 @@ def execute():
 			continue
 
 		doc = frappe.get_doc("Purchase Invoice", name)
-		if any(item.project and item.get("custom_rubrica") for item in doc.items):
+		if doc.get("project") and doc.get("custom_rubrica"):
 			create_cost_entries_from_purchase_invoice(doc)

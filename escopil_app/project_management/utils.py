@@ -40,19 +40,24 @@ def _check_duplicate_budget_rubricas(doc):
 
 
 def create_cost_entries_from_purchase_invoice(doc, method=None):
-	for item in doc.items:
-		if item.project and item.get("custom_rubrica"):
-			_sync(lambda: frappe.get_doc({
-				"doctype": "Project Cost Entry",
-				"project": item.project,
-				"rubrica": item.custom_rubrica,
-				"posting_date": doc.posting_date,
-				"amount": item.base_net_amount,
-				"source_type": "Purchase Invoice",
-				"reference_doctype": "Purchase Invoice",
-				"reference_name": doc.name,
-				"is_auto_generated": 1,
-			}).insert(ignore_permissions=True), flag="in_project_cost_sync")
+	# one invoice == one rubrica, one project: the cost is the header total
+	# (base_grand_total, i.e. c/ IVA), not the sum of the line items
+	if not (doc.get("project") and doc.get("custom_rubrica")):
+		return
+	if not flt(doc.base_grand_total):
+		return
+
+	_sync(lambda: frappe.get_doc({
+		"doctype": "Project Cost Entry",
+		"project": doc.project,
+		"rubrica": doc.custom_rubrica,
+		"posting_date": doc.posting_date,
+		"amount": doc.base_grand_total,
+		"source_type": "Purchase Invoice",
+		"reference_doctype": "Purchase Invoice",
+		"reference_name": doc.name,
+		"is_auto_generated": 1,
+	}).insert(ignore_permissions=True), flag="in_project_cost_sync")
 
 
 def remove_cost_entries_from_purchase_invoice(doc, method=None):
@@ -71,19 +76,24 @@ def create_cost_entries_from_purchase_order(doc, method=None):
 	if doc.get("buying_mode") != "Petty Cash":
 		return
 
-	for item in doc.items:
-		if item.project and item.get("custom_rubrica"):
-			_sync(lambda item=item: frappe.get_doc({
-				"doctype": "Project Cost Entry",
-				"project": item.project,
-				"rubrica": item.custom_rubrica,
-				"posting_date": doc.transaction_date,
-				"amount": item.base_net_amount,
-				"source_type": "Purchase Order (Petty Cash)",
-				"reference_doctype": "Purchase Order",
-				"reference_name": doc.name,
-				"is_auto_generated": 1,
-			}).insert(ignore_permissions=True), flag="in_project_cost_sync")
+	# one PO == one rubrica, one project: the cost is the header total
+	# (base_grand_total, i.e. c/ IVA), not the sum of the line items
+	if not (doc.get("project") and doc.get("custom_rubrica")):
+		return
+	if not flt(doc.base_grand_total):
+		return
+
+	_sync(lambda: frappe.get_doc({
+		"doctype": "Project Cost Entry",
+		"project": doc.project,
+		"rubrica": doc.custom_rubrica,
+		"posting_date": doc.transaction_date,
+		"amount": doc.base_grand_total,
+		"source_type": "Purchase Order (Petty Cash)",
+		"reference_doctype": "Purchase Order",
+		"reference_name": doc.name,
+		"is_auto_generated": 1,
+	}).insert(ignore_permissions=True), flag="in_project_cost_sync")
 
 
 def remove_cost_entries_from_purchase_order(doc, method=None):
@@ -209,12 +219,11 @@ def sync_project_entries(project):
 def _sync_missing_cost_entries(project):
 	pi_names = frappe.db.sql_list(
 		"""
-		select distinct pi.name
-		from `tabPurchase Invoice` pi
-		inner join `tabPurchase Invoice Item` item on item.parent = pi.name
-		where pi.docstatus = 1
-			and item.project = %s
-			and item.custom_rubrica is not null and item.custom_rubrica != ''
+		select name
+		from `tabPurchase Invoice`
+		where docstatus = 1
+			and project = %s
+			and ifnull(custom_rubrica, '') != ''
 		""",
 		project,
 	)
