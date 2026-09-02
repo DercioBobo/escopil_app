@@ -10,6 +10,19 @@ frappe.ui.form.on('Project Billing Forecast', {
 	},
 });
 
+const MONTHS_PT = [
+	'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+	'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+// billing entries are always normalised to the first day of the month, so show
+// the month, not a full date (e.g. "Agosto/2026" instead of "01-08-2026")
+function format_month_pt(value) {
+	if (!value) return '';
+	const d = frappe.datetime.str_to_obj(value);
+	return `${MONTHS_PT[d.getMonth()]}/${d.getFullYear()}`;
+}
+
 const HIDDEN_NATIVE_BUTTONS = ['Duplicate Project with Tasks', 'Gantt Chart', 'Kanban Board'];
 
 function hide_native_project_buttons(frm) {
@@ -124,7 +137,7 @@ function render_budget_entries_section(frm) {
 		order_by: 'month desc',
 		lock_field: 'is_auto_generated',
 		columns: [
-			{ fieldname: 'month', label: __('Mês'), format: (v) => frappe.datetime.str_to_user(v) },
+			{ fieldname: 'month', label: __('Mês'), format: (v) => format_month_pt(v) },
 			{ fieldname: 'billable_amount', label: __('Valor Faturado'), format: (v) => format_currency(v) },
 			{ fieldname: 'source_type', label: __('Origem') },
 		],
