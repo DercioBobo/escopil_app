@@ -94,6 +94,7 @@ class ProjectDashboard {
 	}
 
 	load(project) {
+		this.project = project;
 		frappe.call({
 			method: 'escopil_app.project_management.page.project_dashboard.project_dashboard.get_dashboard_data',
 			args: { project },
@@ -147,6 +148,9 @@ class ProjectDashboard {
 		const pct = (v) => (v || 0).toFixed(1) + '%';
 		const months = data.months;
 		const n_months = months.length || 1;
+
+		this._month_labels = {};
+		months.forEach((m) => { this._month_labels[m.key] = m.label; });
 
 		const total_cost = months.reduce((s, m) => s + (data.totals[m.key] || 0), 0);
 		const total_committed = months.reduce((s, m) => s + (data.committed[m.key] || 0), 0);
@@ -218,7 +222,11 @@ class ProjectDashboard {
 					const committed_sub = committed
 						? `<span class="pd-cell-committed">+${fmt(committed)} comp.</span>`
 						: '';
-					return `<td class="text-right ${v.cls}"${style}>${fmt(actual)}${committed_sub}</td>`;
+					const cls = `text-right ${v.cls}${actual ? ' pd-drill' : ''}`.trim();
+					const drill = actual
+						? ` data-kind="cost" data-month="${m.key}" data-rubrica="${frappe.utils.escape_html(r.rubrica)}"`
+						: '';
+					return `<td class="${cls}"${drill}${style}>${fmt(actual)}${committed_sub}</td>`;
 				}).join('')}
 			</tr>
 		`).join('');
@@ -226,14 +234,24 @@ class ProjectDashboard {
 		const total_row = `
 			<tr class="pd-row-total">
 				<td class="pd-col-rubrica text-left" colspan="3">Total de Custos</td>
-				${months.map(m => `<td class="text-right">${fmt(data.totals[m.key])}</td>`).join('')}
+				${months.map(m => {
+					const val = data.totals[m.key] || 0;
+					const cls = val ? 'text-right pd-drill' : 'text-right';
+					const drill = val ? ` data-kind="cost_total" data-month="${m.key}"` : '';
+					return `<td class="${cls}"${drill}>${fmt(data.totals[m.key])}</td>`;
+				}).join('')}
 			</tr>
 		`;
 
 		const committed_row = `
 			<tr class="pd-row-committed">
 				<td class="text-left" colspan="3">Custos Comprometidos</td>
-				${months.map(m => `<td class="text-right">${fmt(data.committed[m.key])}</td>`).join('')}
+				${months.map(m => {
+					const val = data.committed[m.key] || 0;
+					const cls = val ? 'text-right pd-drill' : 'text-right';
+					const drill = val ? ` data-kind="committed" data-month="${m.key}"` : '';
+					return `<td class="${cls}"${drill}>${fmt(data.committed[m.key])}</td>`;
+				}).join('')}
 			</tr>
 		`;
 
@@ -251,7 +269,9 @@ class ProjectDashboard {
 					const actual = data.billing[m.key] || 0;
 					const v = this.billing_variance_class(actual, data.billing_forecast[m.key]);
 					const style = v.cls ? ` style="--pd-alpha:${v.alpha}"` : '';
-					return `<td class="text-right ${v.cls}"${style}>${fmt(actual)}</td>`;
+					const cls = `text-right ${v.cls}${actual ? ' pd-drill' : ''}`.trim();
+					const drill = actual ? ` data-kind="billing" data-month="${m.key}"` : '';
+					return `<td class="${cls}"${drill}${style}>${fmt(actual)}</td>`;
 				}).join('')}
 			</tr>
 		`;
@@ -290,5 +310,93 @@ class ProjectDashboard {
 				</div>
 			</div>
 		`);
+
+		this.$content.find('td.pd-drill').on('click', (e) => {
+			const $td = $(e.currentTarget);
+			this.show_breakdown($td.attr('data-kind'), $td.attr('data-month'), $td.attr('data-rubrica') || null);
+		});
+	}
+
+	show_breakdown(kind, month, rubrica) {
+		frappe.call({
+			method: 'escopil_app.project_management.page.project_dashboard.project_dashboard.get_cell_breakdown',
+			args: { project: this.project, kind, month: `${month}-01`, rubrica },
+			freeze: true,
+			callback: (r) => {
+				if (r.message) {
+					this.render_breakdown_dialog(kind, month, rubrica, r.message);
+				}
+			},
+		});
+	}
+
+	render_breakdown_dialog(kind, month, rubrica, payload) {
+		const fmt = (v) => format_currency(v || 0);
+		const KIND_LABEL = {
+			cost: __('Custos'),
+			cost_total: __('Total de Custos'),
+			billing: __('Valor Faturado'),
+			committed: __('Custos Comprometidos'),
+		};
+		const month_label = (this._month_labels && this._month_labels[month]) || month;
+		const title = [KIND_LABEL[kind] || kind, rubrica, month_label].filter(Boolean).join(' · ');
+		const show_rubrica = kind === 'cost_total';
+		const rows = payload.rows || [];
+		const span = show_rubrica ? 4 : 3;
+
+		let table;
+		if (!rows.length) {
+			table = `<div class="pd-empty pd-empty-inline">${__('Sem lançamentos.')}</div>`;
+		} else {
+			const tbody = rows.map((row) => {
+				const doc_cell = row.docname
+					? `<a class="pd-drill-link" data-doctype="${frappe.utils.escape_html(row.doctype || '')}" data-docname="${frappe.utils.escape_html(row.docname)}">${frappe.utils.escape_html(row.docname)}</a>`
+					: __('Manual');
+				const note = row.note
+					? `<tr class="pd-note-row"><td colspan="${span + 1}">${frappe.utils.escape_html(row.note)}</td></tr>`
+					: '';
+				return `
+					<tr>
+						<td class="text-left">${frappe.datetime.str_to_user(row.date)}</td>
+						${show_rubrica ? `<td class="text-left">${frappe.utils.escape_html(row.rubrica || '')}</td>` : ''}
+						<td class="text-left">${doc_cell}</td>
+						<td class="text-left">${frappe.utils.escape_html(row.origem || '')}</td>
+						<td class="text-right">${fmt(row.amount)}</td>
+					</tr>${note}`;
+			}).join('');
+
+			table = `
+				<table class="pd-ledger pd-ledger-compact pd-breakdown-table">
+					<thead>
+						<tr>
+							<th class="text-left">${__('Data')}</th>
+							${show_rubrica ? `<th class="text-left">${__('Rubrica')}</th>` : ''}
+							<th class="text-left">${__('Documento')}</th>
+							<th class="text-left">${__('Origem')}</th>
+							<th class="text-right">${__('Valor')}</th>
+						</tr>
+					</thead>
+					<tbody>${tbody}</tbody>
+					<tfoot>
+						<tr class="pd-row-total">
+							<td class="text-left" colspan="${span}">${__('Total')}</td>
+							<td class="text-right">${fmt(payload.total)}</td>
+						</tr>
+					</tfoot>
+				</table>`;
+		}
+
+		const dialog = new frappe.ui.Dialog({
+			title,
+			size: 'large',
+			fields: [{ fieldtype: 'HTML', fieldname: 'body' }],
+		});
+		dialog.fields_dict.body.$wrapper.html(`<div class="project-dashboard pd-breakdown">${table}</div>`);
+		dialog.$wrapper.find('.pd-drill-link').on('click', (e) => {
+			const $a = $(e.currentTarget);
+			frappe.set_route('Form', $a.data('doctype'), $a.data('docname'));
+			dialog.hide();
+		});
+		dialog.show();
 	}
 }

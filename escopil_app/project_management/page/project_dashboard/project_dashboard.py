@@ -2,7 +2,7 @@ from __future__ import unicode_literals
 
 import frappe
 from frappe import _
-from frappe.utils import add_months, flt, get_first_day, getdate
+from frappe.utils import add_months, flt, fmt_money, get_first_day, get_last_day, getdate
 
 MONTHS_PT = [
 	"Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -134,3 +134,124 @@ def get_dashboard_data(project):
 		"margin": margin_by_month,
 		"margin_pct": margin_pct_by_month,
 	}
+
+
+@frappe.whitelist()
+def get_cell_breakdown(project, kind, month, rubrica=None):
+	"""Source documents behind a single dashboard cell, so the value can be
+	drilled from the ledger. `month` is any date in the target month; the sum
+	of the returned rows reconciles to the cell it was opened from.
+
+	kind:
+		cost        — Project Cost Entries for one rubrica in the month
+		cost_total  — Project Cost Entries for every budget rubrica in the month
+		billing     — Project Billing Entries in the month
+		committed   — open (un-billed) Purchase Orders dated in the month
+	"""
+	frappe.has_permission("Project", "read", doc=project, throw=True)
+
+	first_day = get_first_day(month)
+	last_day = get_last_day(first_day)
+
+	if kind == "cost":
+		return _cost_breakdown(project, first_day, last_day, rubrica=rubrica)
+	if kind == "cost_total":
+		budget_rubricas = frappe.get_all(
+			"Project Budget Rubrica", filters={"parent": project}, pluck="rubrica"
+		)
+		return _cost_breakdown(project, first_day, last_day, rubricas=budget_rubricas)
+	if kind == "billing":
+		return _billing_breakdown(project, first_day, last_day)
+	if kind == "committed":
+		return _committed_breakdown(project, first_day, last_day, rubrica=rubrica)
+
+	frappe.throw(_("Tipo de detalhe desconhecido: {0}").format(kind))
+
+
+def _cost_breakdown(project, first_day, last_day, rubrica=None, rubricas=None):
+	filters = {"project": project, "posting_date": ["between", [first_day, last_day]]}
+	if rubrica:
+		filters["rubrica"] = rubrica
+	elif rubricas is not None:
+		filters["rubrica"] = ["in", rubricas or [""]]
+
+	entries = frappe.get_all(
+		"Project Cost Entry",
+		filters=filters,
+		fields=[
+			"posting_date as date", "rubrica", "amount", "source_type as origem",
+			"reference_doctype as doctype", "reference_name as docname", "remarks as note",
+		],
+		order_by="posting_date asc, creation asc",
+	)
+	return _pack(entries)
+
+
+def _billing_breakdown(project, first_day, last_day):
+	entries = frappe.get_all(
+		"Project Billing Entry",
+		filters={"project": project, "month": ["between", [first_day, last_day]]},
+		fields=[
+			"month as date", "billable_amount as amount", "source_type as origem",
+			"reference_doctype as doctype", "reference_name as docname", "remarks as note",
+		],
+		order_by="month asc, creation asc",
+	)
+	return _pack(entries)
+
+
+def _committed_breakdown(project, first_day, last_day, rubrica=None):
+	conditions = ""
+	params = {"project": project, "start": first_day, "end": last_day}
+	if rubrica:
+		conditions = " and po.custom_rubrica = %(rubrica)s"
+		params["rubrica"] = rubrica
+
+	rows = frappe.db.sql(
+		"""
+		select po.name as docname, po.transaction_date as date,
+			po.custom_rubrica as rubrica, po.base_grand_total, po.per_billed
+		from `tabPurchase Order` po
+		where po.docstatus = 1
+			and ifnull(po.buying_mode, '') != 'Petty Cash'
+			and po.project = %(project)s
+			and ifnull(po.custom_rubrica, '') != ''
+			and po.transaction_date between %(start)s and %(end)s
+			{conditions}
+		order by po.transaction_date asc, po.name asc
+		""".format(conditions=conditions),
+		params,
+		as_dict=True,
+	)
+
+	# group by rubrica exactly like the dashboard query (`group by rubrica ...
+	# having total > 0`): a rubrica whose open value nets <= 0 for the month is
+	# dropped whole, so the modal total reconciles to the cell.
+	by_rubrica = {}
+	for po in rows:
+		remaining = flt(po.base_grand_total) * (100 - flt(po.per_billed)) / 100
+		by_rubrica.setdefault(po.rubrica, []).append((po, remaining))
+
+	entries = []
+	for items in by_rubrica.values():
+		if sum(rem for _, rem in items) <= 0:
+			continue
+		for po, remaining in items:
+			entries.append({
+				"date": po.date,
+				"rubrica": po.rubrica,
+				"amount": remaining,
+				"origem": _("Encomenda"),
+				"doctype": "Purchase Order",
+				"docname": po.docname,
+				"note": _("{0} c/ IVA · {1}% faturado").format(
+					fmt_money(po.base_grand_total), flt(po.per_billed)
+				),
+			})
+
+	entries.sort(key=lambda e: (e["date"], e["docname"]))
+	return _pack(entries)
+
+
+def _pack(entries):
+	return {"rows": entries, "total": sum(flt(e["amount"]) for e in entries)}

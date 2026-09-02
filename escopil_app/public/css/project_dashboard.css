@@ -297,6 +297,41 @@
 	font-size: 12px;
 }
 
+/* ---- Drill-down: clickable ledger cells + breakdown modal ---- */
+.project-dashboard td.pd-drill {
+	cursor: pointer;
+}
+.project-dashboard td.pd-drill:hover {
+	box-shadow: inset 0 0 0 1px var(--pd-amber);
+}
+.project-dashboard.pd-breakdown {
+	padding: 4px 0 0;
+}
+.project-dashboard .pd-breakdown-table {
+	white-space: normal;
+}
+.project-dashboard .pd-breakdown-table thead th.text-left {
+	text-align: left;
+}
+.project-dashboard .pd-breakdown-table tr.pd-note-row td {
+	padding-top: 0;
+	color: var(--pd-slate);
+	font-size: 11px;
+	white-space: normal;
+}
+.project-dashboard .pd-breakdown-table a.pd-drill-link {
+	color: var(--pd-amber);
+	cursor: pointer;
+}
+.project-dashboard .pd-breakdown-table a.pd-drill-link:hover {
+	text-decoration: underline;
+}
+.project-dashboard .pd-breakdown-table tfoot tr.pd-row-total td {
+	border-top: 2px solid var(--pd-rule);
+	border-bottom: none;
+	font-weight: 700;
+}
+
 .project-dashboard .pd-fade {
 	animation: pd-fade-in 0.18s ease-out;
 }
