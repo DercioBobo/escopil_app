@@ -165,22 +165,23 @@ def remove_cost_entries_from_vehicle_log(doc, method=None):
 
 
 def create_billing_entries_from_sales_invoice(doc, method=None):
-	amount_by_project = {}
-	for item in doc.items:
-		if item.project:
-			amount_by_project[item.project] = amount_by_project.get(item.project, 0) + flt(item.base_net_amount)
+	# one invoice == one project: the billed value is the header total
+	# (base_grand_total, i.e. c/ IVA), not the sum of the line items
+	if not doc.get("project"):
+		return
+	if not flt(doc.base_grand_total):
+		return
 
-	for project, amount in amount_by_project.items():
-		_sync(lambda project=project, amount=amount: frappe.get_doc({
-			"doctype": "Project Billing Entry",
-			"project": project,
-			"month": doc.posting_date,
-			"billable_amount": amount,
-			"source_type": "Sales Invoice",
-			"reference_doctype": "Sales Invoice",
-			"reference_name": doc.name,
-			"is_auto_generated": 1,
-		}).insert(ignore_permissions=True), flag="in_project_billing_sync")
+	_sync(lambda: frappe.get_doc({
+		"doctype": "Project Billing Entry",
+		"project": doc.project,
+		"month": doc.posting_date,
+		"billable_amount": doc.base_grand_total,
+		"source_type": "Sales Invoice",
+		"reference_doctype": "Sales Invoice",
+		"reference_name": doc.name,
+		"is_auto_generated": 1,
+	}).insert(ignore_permissions=True), flag="in_project_billing_sync")
 
 
 def remove_billing_entries_from_sales_invoice(doc, method=None):
@@ -310,11 +311,10 @@ def _sync_missing_vehicle_log_cost_entries(project):
 def _sync_missing_billing_entries(project):
 	si_names = frappe.db.sql_list(
 		"""
-		select distinct si.name
-		from `tabSales Invoice` si
-		inner join `tabSales Invoice Item` item on item.parent = si.name
-		where si.docstatus = 1
-			and item.project = %s
+		select name
+		from `tabSales Invoice`
+		where docstatus = 1
+			and project = %s
 		""",
 		project,
 	)

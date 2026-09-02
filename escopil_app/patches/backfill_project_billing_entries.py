@@ -20,5 +20,5 @@ def execute():
 			continue
 
 		doc = frappe.get_doc("Sales Invoice", name)
-		if any(item.project for item in doc.items):
+		if doc.get("project"):
 			create_billing_entries_from_sales_invoice(doc)
