@@ -3,22 +3,22 @@ from __future__ import unicode_literals
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import get_first_day
+from frappe.utils import get_first_day, get_last_day
 
 
 class ProjectBillingEntry(Document):
 	def validate(self):
-		self.month = get_first_day(self.month)
-
 		if self.is_auto_generated:
 			self._check_auto_generated_edit()
 			return
 
+		# `month` keeps its exact day; the "one manual entry per month" rule is
+		# still enforced, but by calendar month rather than an exact date match
 		duplicate = frappe.db.exists(
 			"Project Billing Entry",
 			{
 				"project": self.project,
-				"month": self.month,
+				"month": ("between", [get_first_day(self.month), get_last_day(self.month)]),
 				"is_auto_generated": 0,
 				"name": ("!=", self.name),
 			},
