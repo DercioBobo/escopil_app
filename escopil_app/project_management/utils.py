@@ -174,10 +174,10 @@ def remove_cost_entries_from_vehicle_log(doc, method=None):
 
 def create_billing_entries_from_sales_invoice(doc, method=None):
 	# one invoice == one project: the billed value is the header total
-	# (base_grand_total, i.e. c/ IVA), not the sum of the line items
+	# (base_net_total, i.e. s/ IVA), not the sum of the line items
 	if not doc.get("project"):
 		return
-	if not flt(doc.base_grand_total):
+	if not flt(doc.base_net_total):
 		return
 	if _auto_entry_exists("Project Billing Entry", "Sales Invoice", doc.name):
 		return
@@ -186,7 +186,7 @@ def create_billing_entries_from_sales_invoice(doc, method=None):
 		"doctype": "Project Billing Entry",
 		"project": doc.project,
 		"month": doc.posting_date,
-		"billable_amount": doc.base_grand_total,
+		"billable_amount": doc.base_net_total,
 		"source_type": "Sales Invoice",
 		"reference_doctype": "Sales Invoice",
 		"reference_name": doc.name,

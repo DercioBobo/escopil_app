@@ -8,3 +8,4 @@ escopil_app.patches.backfill_stock_entry_cost_entries
 escopil_app.patches.backfill_vehicle_log_cost_entries
 escopil_app.patches.backfill_doc_header_rubrica_project
 escopil_app.patches.resync_header_based_cost_entries
+escopil_app.patches.revalue_entries_without_tax
