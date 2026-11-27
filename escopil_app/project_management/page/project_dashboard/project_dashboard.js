@@ -107,40 +107,46 @@ class ProjectDashboard {
 		});
 	}
 
-	// variance = actual vs. the rubrica's own monthly forecast; class carries
-	// how far under/over budget the cell is, alpha scales with severity
+	// variance = actual vs. the rubrica's own monthly forecast. Any excess over
+	// the forecast is flagged in vivid red (pd-flag-bad); comfortably under
+	// budget keeps the soft green heat tint, alpha scaling with severity
 	variance_class(actual, forecast) {
 		if (!forecast) {
-			return actual ? { cls: 'pd-variance-over', alpha: 0.16 } : { cls: '', alpha: 0 };
+			return actual ? { cls: 'pd-flag-bad', alpha: 0 } : { cls: '', alpha: 0 };
 		}
 		const ratio = actual / forecast;
+		if (ratio > 1) {
+			return { cls: 'pd-flag-bad', alpha: 0 };
+		}
 		if (ratio <= 0.9) {
 			const severity = Math.min((0.9 - ratio) / 0.9, 1);
 			return { cls: 'pd-variance-under', alpha: 0.08 + severity * 0.18 };
 		}
-		if (ratio > 1.1) {
-			const severity = Math.min((ratio - 1.1) / 1.1, 1);
-			return { cls: 'pd-variance-over', alpha: 0.08 + severity * 0.22 };
-		}
 		return { cls: '', alpha: 0 };
 	}
 
-	// billing variance is inverted vs. cost variance: meeting/exceeding the
-	// monthly billing target is good (green), falling short is bad (rust)
-	billing_variance_class(actual, forecast) {
-		if (!forecast) {
-			return actual ? { cls: 'pd-variance-under', alpha: 0.16 } : { cls: '', alpha: 0 };
+	// months after the current one haven't happened yet — no "ok"/"short"
+	// verdict for them, otherwise every future month would read as green
+	// costs (nothing spent) or red billing (nothing invoiced)
+	is_elapsed(month_key) {
+		return month_key <= frappe.datetime.get_today().slice(0, 7);
+	}
+
+	// total cost vs. the summed monthly forecast: red if exceeded, green if not
+	cost_total_class(actual, forecast, month_key) {
+		if (actual > (forecast || 0)) return 'pd-flag-bad';
+		if (this.is_elapsed(month_key) && actual) return 'pd-flag-good';
+		return '';
+	}
+
+	// billing is inverted vs. cost: any shortfall vs. the monthly billing
+	// target is red, meeting/exceeding it is green
+	billing_class(actual, forecast, month_key) {
+		if (!this.is_elapsed(month_key)) {
+			return actual ? 'pd-flag-good' : '';
 		}
-		const ratio = actual / forecast;
-		if (ratio >= 1.1) {
-			const severity = Math.min((ratio - 1.1) / 1.1, 1);
-			return { cls: 'pd-variance-under', alpha: 0.08 + severity * 0.18 };
-		}
-		if (ratio < 0.9) {
-			const severity = Math.min((0.9 - ratio) / 0.9, 1);
-			return { cls: 'pd-variance-over', alpha: 0.08 + severity * 0.22 };
-		}
-		return { cls: '', alpha: 0 };
+		if (actual < (forecast || 0)) return 'pd-flag-bad';
+		return actual ? 'pd-flag-good' : '';
 	}
 
 	render(data) {
@@ -161,6 +167,13 @@ class ProjectDashboard {
 		const total_margin_pct = total_billing ? (total_margin / total_billing * 100) : 0;
 		const budget_total = (data.total_forecast || 0) * n_months;
 
+		// to-date comparisons for the strip colours (elapsed months only)
+		const elapsed = months.filter(m => this.is_elapsed(m.key));
+		const budget_to_date = (data.total_forecast || 0) * elapsed.length;
+		const billing_forecast_to_date = elapsed.reduce((s, m) => s + (data.billing_forecast[m.key] || 0), 0);
+		const cost_flag = total_cost > budget_to_date ? 'is-negative' : (total_cost ? 'is-positive' : '');
+		const billing_flag = total_billing < billing_forecast_to_date ? 'is-negative' : (total_billing ? 'is-positive' : '');
+
 		const strip = `
 			<div class="pd-strip">
 				<div class="pd-stat">
@@ -170,7 +183,7 @@ class ProjectDashboard {
 				</div>
 				<div class="pd-stat">
 					<span class="pd-stat-label">Custos Reais</span>
-					<span class="pd-stat-value">${fmt(total_cost)}</span>
+					<span class="pd-stat-value ${cost_flag}">${fmt(total_cost)}</span>
 					<span class="pd-stat-sub">${budget_total ? pct(total_cost / budget_total * 100) : '—'} do orçamento</span>
 				</div>
 				<div class="pd-stat">
@@ -185,7 +198,7 @@ class ProjectDashboard {
 				</div>
 				<div class="pd-stat">
 					<span class="pd-stat-label">Valor Faturado</span>
-					<span class="pd-stat-value">${fmt(total_billing)}</span>
+					<span class="pd-stat-value ${billing_flag}">${fmt(total_billing)}</span>
 					<span class="pd-stat-sub">${total_billing_forecast ? pct(total_billing / total_billing_forecast * 100) : '—'} da previsão</span>
 				</div>
 				<div class="pd-stat">
@@ -237,7 +250,8 @@ class ProjectDashboard {
 				<td class="pd-col-rubrica text-left" colspan="3">Total de Custos</td>
 				${months.map(m => {
 					const val = data.totals[m.key] || 0;
-					const cls = val ? 'text-right pd-drill' : 'text-right';
+					const flag = this.cost_total_class(val, data.total_forecast, m.key);
+					const cls = `text-right ${flag}${val ? ' pd-drill' : ''}`.trim();
 					const drill = val ? ` data-kind="cost_total" data-month="${m.key}"` : '';
 					return `<td class="${cls}"${drill}>${fmt(data.totals[m.key])}</td>`;
 				}).join('')}
@@ -268,11 +282,10 @@ class ProjectDashboard {
 				<td class="text-left" colspan="3">Valor Faturado</td>
 				${months.map(m => {
 					const actual = data.billing[m.key] || 0;
-					const v = this.billing_variance_class(actual, data.billing_forecast[m.key]);
-					const style = v.cls ? ` style="--pd-alpha:${v.alpha}"` : '';
-					const cls = `text-right ${v.cls}${actual ? ' pd-drill' : ''}`.trim();
+					const flag = this.billing_class(actual, data.billing_forecast[m.key], m.key);
+					const cls = `text-right ${flag}${actual ? ' pd-drill' : ''}`.trim();
 					const drill = actual ? ` data-kind="billing" data-month="${m.key}"` : '';
-					return `<td class="${cls}"${drill}${style}>${fmt(actual)}</td>`;
+					return `<td class="${cls}"${drill}>${fmt(actual)}</td>`;
 				}).join('')}
 			</tr>
 		`;

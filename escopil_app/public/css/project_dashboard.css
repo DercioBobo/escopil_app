@@ -14,6 +14,10 @@
 	--pd-moss-rgb: 63, 107, 82;
 	--pd-rust: #a23e2e;
 	--pd-rust-rgb: 162, 62, 46;
+	--pd-red: #d92d20;
+	--pd-red-rgb: 217, 45, 32;
+	--pd-green: #15803d;
+	--pd-green-rgb: 21, 128, 61;
 
 	color: var(--pd-ink);
 	padding: 20px 4px 40px;
@@ -28,6 +32,10 @@
 		--pd-amber: #d9a55c;
 		--pd-moss: #6fa98a;
 		--pd-rust: #e2695a;
+		--pd-red: #ff5a4f;
+		--pd-red-rgb: 255, 90, 79;
+		--pd-green: #4ade80;
+		--pd-green-rgb: 74, 222, 128;
 	}
 }
 :root[data-theme="dark"] .project-dashboard {
@@ -38,6 +46,10 @@
 	--pd-amber: #d9a55c;
 	--pd-moss: #6fa98a;
 	--pd-rust: #e2695a;
+	--pd-red: #ff5a4f;
+	--pd-red-rgb: 255, 90, 79;
+	--pd-green: #4ade80;
+	--pd-green-rgb: 74, 222, 128;
 }
 :root[data-theme="light"] .project-dashboard {
 	--pd-ink: #1b2430;
@@ -47,6 +59,10 @@
 	--pd-amber: #b8873b;
 	--pd-moss: #3f6b52;
 	--pd-rust: #a23e2e;
+	--pd-red: #d92d20;
+	--pd-red-rgb: 217, 45, 32;
+	--pd-green: #15803d;
+	--pd-green-rgb: 21, 128, 61;
 }
 
 .project-dashboard .pd-filter-bar {
@@ -100,8 +116,8 @@
 	color: var(--pd-slate);
 	font-variant-numeric: tabular-nums;
 }
-.project-dashboard .pd-stat-value.is-positive { color: var(--pd-moss); }
-.project-dashboard .pd-stat-value.is-negative { color: var(--pd-rust); }
+.project-dashboard .pd-stat-value.is-positive { color: var(--pd-green); }
+.project-dashboard .pd-stat-value.is-negative { color: var(--pd-red); }
 
 /* ---- Section eyebrow ---- */
 .project-dashboard .pd-eyebrow {
@@ -203,6 +219,19 @@
 
 .project-dashboard tr.pd-row-total td {
 	border-top: 2px solid var(--pd-rule);
+	font-weight: 700;
+}
+
+/* vivid flags — exceeded forecast / short of billing target (bad) vs. within
+   target (good). Declared after the row rules so they win over row greys. */
+.project-dashboard table.pd-ledger td.pd-flag-bad {
+	color: var(--pd-red);
+	background: rgba(var(--pd-red-rgb), 0.14);
+	font-weight: 700;
+}
+.project-dashboard table.pd-ledger td.pd-flag-good {
+	color: var(--pd-green);
+	background: rgba(var(--pd-green-rgb), 0.10);
 	font-weight: 700;
 }
 .project-dashboard tr.pd-row-committed td,
